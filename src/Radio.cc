@@ -52,6 +52,7 @@ void Radio::initialize() {
 }
 
 void Radio::handleMessage(cMessage *msg) {
+    updateDaytime();
     cGate *arrivalGate = msg->getArrivalGate();
     if (msg->isSelfMessage()) {
         updateRadio(msg);
@@ -66,6 +67,7 @@ void Radio::handleMessage(cMessage *msg) {
                             device.name.c_str(), device.index);
             sendDirect(msg->dup(), target, "radioIn");
         }
+        delete msg;
     } else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
         if (isReceivedCorrectly(msg))
             send(msg, "toLogic");
@@ -117,7 +119,7 @@ void Radio::updateRadio(cMessage *msg) {
             break;
         case DevType::RELAY:
         case DevType::ENDNODE:
-
+            //according to listeningWindow i dayTime set the timer and mode
             radioStatus = RadioActivity::LISTENING;
             break;
         }
@@ -126,7 +128,8 @@ void Radio::updateRadio(cMessage *msg) {
 
 void Radio::updateDaytime()
 {
-
+    int64_t timeInMinutesFromTheBeginning = simTime().inUnit(SIMTIME_S) / 60;
+    dayTime = timeInMinutesFromTheBeginning % (60*24);
 }
 //
 //
