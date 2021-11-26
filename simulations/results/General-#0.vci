@@ -1,0 +1,26 @@
+file 554 1636977802                                             
+version 3
+run General-0-20211115-13:02:17-1001
+attr configname General
+attr datetime 20211115-13:02:17
+attr datetimef 20211115-130217
+attr experiment General
+attr inifile omnetpp.ini
+attr iterationvars ""
+attr iterationvarsd ""
+attr iterationvarsf ""
+attr measurement ""
+attr network LoraRelay
+attr processid 1001
+attr repetition 0
+attr replication #0
+attr resultdir results
+attr runnumber 0
+attr seedset 0
+config network LoraRelay
+config cpu-time-limit 60s
+
+vector 0 LoraRelay.sink arrivals ETV
+attr interpolationmode none
+0	524 29 2 4 0 0.795874504566 2 1 1 2 2
+
