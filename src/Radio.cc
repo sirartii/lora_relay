@@ -49,10 +49,16 @@ void Radio::initialize() {
     cMessage *radioUpdate = new cMessage("radioUpdate");
     scheduleAt(simTime(), radioUpdate);
     radioStatus = RadioActivity::UNKNOWN;
+    listeningWindowStart1 = par("listeningWindowStart1").intValue();
+    listeningWindowStart2 = par("listeningWindowStart2").intValue();
+    listeningWindowDuration1 = par("listeningWindowDuration1").intValue();
+    listeningWindowDuration2 = par("listeningWindowDuration2").intValue();
 }
 
 void Radio::handleMessage(cMessage *msg) {
-    updateDaytime();
+    updateDaytime(); //no.1 - order is important
+//    updateRadio(msg); //no.2 - order is important
+
     cGate *arrivalGate = msg->getArrivalGate();
     if (msg->isSelfMessage()) {
         updateRadio(msg);
@@ -60,6 +66,8 @@ void Radio::handleMessage(cMessage *msg) {
         msg->addPar("xpos") = position.x;
         msg->addPar("ypos") = position.y;
         msg->addPar("txPower") = txPower;
+        msg->addPar("channel") = 1; //TODO
+        msg->addPar("spreadingfactor") = 12; //TODO
         for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
         {
             cModule *target =
@@ -70,25 +78,29 @@ void Radio::handleMessage(cMessage *msg) {
         delete msg;
     } else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
         if (isReceivedCorrectly(msg))
+        {
+            setRadioBusyDuration(msg);
             send(msg, "toLogic");
+        }
     }
 }
 
 bool Radio::isReceivedCorrectly(cMessage *msg) {
-    float rssi = getRssi(msg);
-    EV << "I'm " << deviceType << ", received packet with " << rssi << "\n";
-    if (rssi > sensitivity)
-        return true;
-    else {
-        delete msg;
-        return false;
+    if (radioStatus == RadioActivity::LISTENING) {
+        float rssi = getRssi(msg);
+        EV << "I'm " << deviceType << ", received packet with " << rssi << "\n";
+        if (rssi > sensitivity) {
+            return true;
+        }
     }
+    delete msg;
+    return false;
 
 }
 
 double Radio::getRssi(cMessage *msg) {
-    std::cout << "Received from: " << msg->par("xpos").doubleValue() << ", "
-            << msg->par("ypos").doubleValue() << "\n";
+//    std::cout << "Received from: " << msg->par("xpos").doubleValue() << ", "
+//            << msg->par("ypos").doubleValue() << "\n";
     double distance = sqrt(
             pow(position.x - msg->par("xpos").doubleValue(), 2)
                     + pow(position.y - msg->par("ypos").doubleValue(), 2));
@@ -119,18 +131,42 @@ void Radio::updateRadio(cMessage *msg) {
             break;
         case DevType::RELAY:
         case DevType::ENDNODE:
-            //according to listeningWindow i dayTime set the timer and mode
-            radioStatus = RadioActivity::LISTENING;
+            if (((dayTime >= listeningWindowStart1)
+                    and (dayTime
+                            < listeningWindowStart1 + listeningWindowDuration1))
+                    or ((dayTime >= listeningWindowStart2)
+                            and (dayTime
+                                    < listeningWindowStart2
+                                            + listeningWindowDuration2))) {
+                radioStatus = RadioActivity::LISTENING;
+                //TODO: selfmsg to set radio off
+            } else {
+                radioStatus = RadioActivity::RADIOOFF;
+                //TODO: selfmsg to set listening
+            }
             break;
         }
     }
+    delete msg;
 }
 
-void Radio::updateDaytime()
-{
+void Radio::updateDaytime() {
     int64_t timeInMinutesFromTheBeginning = simTime().inUnit(SIMTIME_S) / 60;
-    dayTime = timeInMinutesFromTheBeginning % (60*24);
+    dayTime = timeInMinutesFromTheBeginning % (60 * 24);
 }
+
+
+void Radio::setRadioBusyDuration(cMessage *msg)
+{
+    int payloadsize = msg->par("payloadsize");
+    int channel = msg->par("channel");
+    int spreadingfactor = msg->par("spreadingfactor");
+    radioStatus = RadioActivity::RECEIVING; //TODO: or Transmission - switch needed
+
+    //TODO: calculate duration of transmission and set selfmsg
+
+}
+
 //
 //
 //    def returnSpreadingFactor(self, SINR, minSINR):

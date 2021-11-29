@@ -43,6 +43,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
     ASSERT(msg==timerMessage);
 
       cMessage *job = new cMessage("job");
+      job->addPar("payloadsize") = 54; //TODO
       send(job, "logicOut");
 
       scheduleAt(simTime()+par("sendInterval").doubleValue(), timerMessage);
