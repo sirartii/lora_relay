@@ -51,8 +51,8 @@ protected:
     double calculateReceivedPower(float pSend, double distance);
     void updateRadio (cMessage *msg);
     void updateDaytime();
-    void setRadioBusyDuration(cMessage *msg);
-
+    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
+    double transmissionTimeInSec(int msgSize, int sf);
 
     DevType::dt deviceType;
     RadioActivity::ra radioStatus;
@@ -61,12 +61,14 @@ protected:
     double txPower;
     double sensitivity;
     int dayTime;
+    simtime_t busyUntil;
 
 //    cMessage *radioStatusTimer;
     int listeningWindowStart1;
     int listeningWindowStart2;
     int listeningWindowDuration1;
     int listeningWindowDuration2;
+    cOutVector radioStatusVector;
 };
 
 }

@@ -53,21 +53,28 @@ void Radio::initialize() {
     listeningWindowStart2 = par("listeningWindowStart2").intValue();
     listeningWindowDuration1 = par("listeningWindowDuration1").intValue();
     listeningWindowDuration2 = par("listeningWindowDuration2").intValue();
+    busyUntil = -1;
+    WATCH(busyUntil);
+    WATCH(deviceType);
+    WATCH(radioStatus);
+    radioStatusVector.setName("radioStatus");
 }
 
 void Radio::handleMessage(cMessage *msg) {
     updateDaytime(); //no.1 - order is important
-//    updateRadio(msg); //no.2 - order is important
-
+    updateRadio(msg); //no.2 - order is important
+    radioStatusVector.record(radioStatus);
     cGate *arrivalGate = msg->getArrivalGate();
     if (msg->isSelfMessage()) {
-        updateRadio(msg);
+        delete msg;
     } else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
         msg->addPar("xpos") = position.x;
         msg->addPar("ypos") = position.y;
         msg->addPar("txPower") = txPower;
         msg->addPar("channel") = 1; //TODO
         msg->addPar("spreadingfactor") = 12; //TODO
+        if (keeper->returnRadioDevices().size() > 0)
+            setRadioBusyDuration(msg, RadioActivity::TRANSMITTING);
         for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
         {
             cModule *target =
@@ -77,9 +84,8 @@ void Radio::handleMessage(cMessage *msg) {
         }
         delete msg;
     } else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
-        if (isReceivedCorrectly(msg))
-        {
-            setRadioBusyDuration(msg);
+        if (isReceivedCorrectly(msg)) {
+            setRadioBusyDuration(msg, RadioActivity::RECEIVING);
             send(msg, "toLogic");
         }
     }
@@ -123,31 +129,30 @@ double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lit
 
 }
 
-void Radio::updateRadio(cMessage *msg) {
-    if (radioStatus == RadioActivity::UNKNOWN) {
-        switch (deviceType) {
-        case DevType::GATEWAY:
+void Radio::updateRadio(cMessage *msg) { //TODO: add gateway exception - multiple receives
+    if (((radioStatus == RadioActivity::RECEIVING)
+            or (radioStatus == RadioActivity::TRANSMITTING))
+            and (simTime() <= busyUntil))
+        return;
+
+    switch (deviceType) {
+    case DevType::GATEWAY:
+        radioStatus = RadioActivity::LISTENING;
+        break;
+    case DevType::RELAY:
+    case DevType::ENDNODE:
+        if (((dayTime >= listeningWindowStart1)
+                and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
+                or ((dayTime >= listeningWindowStart2)
+                        and (dayTime
+                                < listeningWindowStart2
+                                        + listeningWindowDuration2))) {
             radioStatus = RadioActivity::LISTENING;
-            break;
-        case DevType::RELAY:
-        case DevType::ENDNODE:
-            if (((dayTime >= listeningWindowStart1)
-                    and (dayTime
-                            < listeningWindowStart1 + listeningWindowDuration1))
-                    or ((dayTime >= listeningWindowStart2)
-                            and (dayTime
-                                    < listeningWindowStart2
-                                            + listeningWindowDuration2))) {
-                radioStatus = RadioActivity::LISTENING;
-                //TODO: selfmsg to set radio off
-            } else {
-                radioStatus = RadioActivity::RADIOOFF;
-                //TODO: selfmsg to set listening
-            }
-            break;
+        } else {
+            radioStatus = RadioActivity::RADIOOFF;
         }
+        break;
     }
-    delete msg;
 }
 
 void Radio::updateDaytime() {
@@ -155,16 +160,35 @@ void Radio::updateDaytime() {
     dayTime = timeInMinutesFromTheBeginning % (60 * 24);
 }
 
-
-void Radio::setRadioBusyDuration(cMessage *msg)
-{
-    int payloadsize = msg->par("payloadsize");
-    int channel = msg->par("channel");
+void Radio::setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae) {
+    int msgSize = msg->par("msgSize");
     int spreadingfactor = msg->par("spreadingfactor");
-    radioStatus = RadioActivity::RECEIVING; //TODO: or Transmission - switch needed
+    radioStatus = rae;
+    busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
+}
 
-    //TODO: calculate duration of transmission and set selfmsg
+double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading factor 7 - 12; parameter - rozmiar wiadomosci w bajtach
+        { //przeliczanie jak dlugo dana wiadomosc bedzie sie transmitowala - funkcja z symulacji Rafala
+    double de = 0;
+    if (sf == 11 || sf == 12)
+        de = 1;
+    int bandwidth = 125;
+    int loraHeaderSize = 13;
+    int preambleSymbols = 8;
+    double explicitHeader = 1;
+    int codingRate = 5;
+    double I18 = pow(2, sf) / (bandwidth * 1000) * 1000;
+    double I19 = (preambleSymbols + 4.25) * I18;
+    double roundUp = ceil(
+            ((8 * (msgSize + loraHeaderSize) - 4 * sf + 28 + 16
+                    - 20 * (1 - explicitHeader)) / (4 * (sf - 2 * de))))
+            * codingRate;
+    double maximum = fmax(roundUp, 0);
+    double I20 = 8 + maximum;
+    double I21 = I20 * I18;
+    double formula = I19 + I21;
 
+    return formula / 1000.0;
 }
 
 //
