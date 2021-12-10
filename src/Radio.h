@@ -32,9 +32,16 @@ struct DevType {
 
 struct RadioActivity {
     enum ra {
-        UNKNOWN, RADIOOFF, LISTENING, RECEIVING, TRANSMITTING
+        UNKNOWN, RADIOOFF, LISTENING, RECEIVING, TRANSMITTING, TIMER
     };
 };
+
+struct SelfMsgType {
+    enum ra {
+        UNKNOWN, RADIOINIT, WINDOWTIMER, TXRXTIMER
+    };
+};
+
 struct Coords {
     double x, y;
 };
@@ -49,9 +56,12 @@ protected:
     bool isReceivedCorrectly(cMessage *msg);
     double getRssi(cMessage *msg);
     double calculateReceivedPower(float pSend, double distance);
-    void updateRadio (cMessage *msg);
+    void updateRadio (cMessage *msg, RadioActivity::ra rae);
     void updateDaytime();
-    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
+    void sendToNetwork(cMessage *msg);
+    void receiveFromNetwork(cMessage *msg);
+
+//    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
     double transmissionTimeInSec(int msgSize, int sf);
 
     DevType::dt deviceType;
@@ -62,6 +72,7 @@ protected:
     double sensitivity;
     int dayTime;
     simtime_t busyUntil;
+    std::string tmp_name;
 
 //    cMessage *radioStatusTimer;
     int listeningWindowStart1;

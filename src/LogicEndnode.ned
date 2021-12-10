@@ -21,7 +21,7 @@ package opp_lora_relay_official;
 simple LogicEndnode
 {
         parameters:
-        volatile double sendInterval @unit(s) = default(exponential(1s));
+        volatile double sendInterval @unit(s) = default(exponential(60min));
 	gates:
         output logicOut;
         input logicIn;
