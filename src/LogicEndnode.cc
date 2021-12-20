@@ -42,7 +42,8 @@ void LogicEndnode::handleMessage(cMessage *msg)
     {
     ASSERT(msg==timerMessage);
 
-      cMessage *job = new cMessage("job");
+    cModule *parent = getParentModule();
+      cMessage *job = new cMessage(parent->getFullName());
       job->addPar("msgSize") = 54; //TODO
       send(job, "logicOut");
 

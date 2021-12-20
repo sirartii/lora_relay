@@ -56,10 +56,13 @@ protected:
     bool isReceivedCorrectly(cMessage *msg);
     double getRssi(cMessage *msg);
     double calculateReceivedPower(float pSend, double distance);
-    void updateRadio (cMessage *msg, RadioActivity::ra rae);
+    void updateRadio();
+    void setRadioStatus(cMessage *msg);
     void updateDaytime();
     void sendToNetwork(cMessage *msg);
     void receiveFromNetwork(cMessage *msg);
+    void directSendWithDelete(cMessage *msg);
+
 
 //    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
     double transmissionTimeInSec(int msgSize, int sf);
@@ -73,6 +76,7 @@ protected:
     int dayTime;
     simtime_t busyUntil;
     std::string tmp_name;
+    std::vector<cMessage*> sendQueue;
 
 //    cMessage *radioStatusTimer;
     int listeningWindowStart1;

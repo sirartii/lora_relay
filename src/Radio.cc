@@ -19,7 +19,8 @@ namespace opp_lora_relay_official {
 
 Define_Module(Radio);
 
-void Radio::initialize() {
+void Radio::initialize()
+{
     cModule *parent = getParentModule();
     std::string s = parent->getName();
     tmp_name = parent->getFullName();
@@ -31,15 +32,17 @@ void Radio::initialize() {
 
     if (s.rfind("endnode", 0) == 0) {
         deviceType = DevType::ENDNODE;
-    } else if (s.rfind("relay", 0) == 0) {
+    }
+    else if (s.rfind("relay", 0) == 0) {
         deviceType = DevType::RELAY;
-    } else if (s.rfind("gateway", 0) == 0) {
+    }
+    else if (s.rfind("gateway", 0) == 0) {
         deviceType = DevType::GATEWAY;
-    } else {
+    }
+    else {
         deviceType = DevType::DEVUNKNOWN;
     }
-    keeper = check_and_cast<Keeper*>(
-            parent->getParentModule()->getSubmodule("keeper"));
+    keeper = check_and_cast<Keeper*>(parent->getParentModule()->getSubmodule("keeper"));
 
     keeper->registerMe(s, index);
 
@@ -57,33 +60,21 @@ void Radio::initialize() {
     listeningWindowDuration2 = par("listeningWindowDuration2").intValue();
     busyUntil = -1;
     if (deviceType != DevType::GATEWAY) {
-        cMessage *timer_listeningWindowStart1 = new cMessage(
-                "listeningWindowStart1");
+        cMessage *timer_listeningWindowStart1 = new cMessage("listeningWindowStart1");
         timer_listeningWindowStart1->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart1 * 60,
-                timer_listeningWindowStart1);
+        scheduleAt(simTime() + listeningWindowStart1 * 60, timer_listeningWindowStart1);
 
-        cMessage *timer_listeningWindowStop1 = new cMessage(
-                "listeningWindowStop1");
+        cMessage *timer_listeningWindowStop1 = new cMessage("listeningWindowStop1");
         timer_listeningWindowStop1->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(
-                simTime() + listeningWindowStart1 * 60
-                        + listeningWindowDuration1 * 60,
-                timer_listeningWindowStop1);
+        scheduleAt(simTime() + listeningWindowStart1 * 60 + listeningWindowDuration1 * 60, timer_listeningWindowStop1);
 
-        cMessage *timer_listeningWindowStart2 = new cMessage(
-                "listeningWindowStart2");
+        cMessage *timer_listeningWindowStart2 = new cMessage("listeningWindowStart2");
         timer_listeningWindowStart2->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart2 * 60,
-                timer_listeningWindowStart2);
+        scheduleAt(simTime() + listeningWindowStart2 * 60, timer_listeningWindowStart2);
 
-        cMessage *timer_listeningWindowStop2 = new cMessage(
-                "listeningWindowStop2");
+        cMessage *timer_listeningWindowStop2 = new cMessage("listeningWindowStop2");
         timer_listeningWindowStop2->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(
-                simTime() + listeningWindowStart2 * 60
-                        + listeningWindowDuration2 * 60,
-                timer_listeningWindowStop2);
+        scheduleAt(simTime() + listeningWindowStart2 * 60 + listeningWindowDuration2 * 60, timer_listeningWindowStop2);
     }
     WATCH(busyUntil);
     WATCH(deviceType);
@@ -91,134 +82,148 @@ void Radio::initialize() {
     radioStatusVector.setName("radioStatus");
 }
 
-void Radio::handleMessage(cMessage *msg) {
-    EV << simTime() << " - " << tmp_name << ": " << "handle message "
-              << msg->getName() << "\n";
-    updateDaytime(); //no.1 - order is important
-//    updateRadio(msg); //no.2 - order is important
+void Radio::handleMessage(cMessage *msg)
+{
+    updateDaytime();
     cGate *arrivalGate = msg->getArrivalGate();
     if (msg->isSelfMessage()) {
-        updateRadio(msg, RadioActivity::TIMER);
-    } else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
-      sendToNetwork(msg);
-    } else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
+        switch (msg->getKind()) {
+            case SelfMsgType::RADIOINIT:
+                updateRadio();
+                delete msg;
+                break;
+            case SelfMsgType::WINDOWTIMER:
+                scheduleAt(simTime() + 24 * 3600, msg);
+                updateRadio();
+                break;
+            case SelfMsgType::TXRXTIMER:
+                if (sendQueue.size() > 0) {
+                    sendToNetwork(NULL);
+                }else
+                {
+                    updateRadio();
+                }
+                delete msg;
+                break;
+            default:
+                delete msg;
+                break;
+        }
+    }
+    else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
+        sendToNetwork(msg);
+    }
+    else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
         receiveFromNetwork(msg);
     }
-    EV << simTime() << " - " << tmp_name << ": " << " radio status "
-              << radioStatus << "\n";
+    EV << simTime() << " - " << tmp_name << ": " << " radio status " << radioStatus << "\n";
     radioStatusVector.record(radioStatus);
-
 }
 
-void Radio::updateRadio(cMessage *msg, RadioActivity::ra rae) {
-    if (msg->getKind() == SelfMsgType::WINDOWTIMER) {
-        EV << simTime() << " - " << tmp_name << ": " << " WINDOWTIMER "
-                  << simTime() + 24 * 3600 << "\n";
-        scheduleAt(simTime() + 24 * 3600, msg);
-        assert(rae == RadioActivity::TIMER);
-    }
-
-    if ((rae == RadioActivity::RECEIVING)
-            or (rae == RadioActivity::TRANSMITTING)) {
-        int msgSize = msg->par("msgSize");
-        int spreadingfactor = msg->par("spreadingfactor");
-        radioStatus = rae;
-        busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
-        cMessage *radioUpdate = new cMessage("radioUpdate");
-        radioUpdate->setKind(SelfMsgType::TXRXTIMER);
-        scheduleAt(busyUntil, radioUpdate);
-        EV << simTime() << " - " << tmp_name << ": " << "TX/RX radio busy start"
-                  << "\n";
-        return;
-    }
-
-    if (((radioStatus == RadioActivity::RECEIVING)
-            or (radioStatus == RadioActivity::TRANSMITTING))
+void Radio::updateRadio()
+{
+    if (((radioStatus == RadioActivity::RECEIVING) or (radioStatus == RadioActivity::TRANSMITTING))
             and (simTime() < busyUntil)) {
-        EV << simTime() << " - " << tmp_name << ": " << "radio is busy" << "\n";
-        delete msg;
         return;
     }
-
     switch (deviceType) {
-    case DevType::GATEWAY:
-        radioStatus = RadioActivity::LISTENING;
-        EV << simTime() << " - " << tmp_name << ": " << "listening start"
-                  << "\n";
-        break;
-    case DevType::RELAY:
-    case DevType::ENDNODE:
-        if (((dayTime >= listeningWindowStart1)
-                and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
-                or ((dayTime >= listeningWindowStart2)
-                        and (dayTime
-                                < listeningWindowStart2
-                                        + listeningWindowDuration2))) {
+        case DevType::GATEWAY:
             radioStatus = RadioActivity::LISTENING;
-            EV << simTime() << " - " << tmp_name << ": " << "listening start"
-                      << "\n";
-        } else {
-            radioStatus = RadioActivity::RADIOOFF;
-            EV << simTime() << " - " << tmp_name << ": " << "radio off" << "\n";
-        }
-        break;
+            EV << simTime() << " - " << tmp_name << ": " << "listening start" << "\n";
+            break;
+        case DevType::RELAY:
+        case DevType::ENDNODE:
+            if (((dayTime >= listeningWindowStart1) and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
+                    or ((dayTime >= listeningWindowStart2)
+                            and (dayTime < listeningWindowStart2 + listeningWindowDuration2))) {
+                radioStatus = RadioActivity::LISTENING;
+                EV << simTime() << " - " << tmp_name << ": " << "listening start" << "\n";
+            }
+            else {
+                radioStatus = RadioActivity::RADIOOFF;
+                EV << simTime() << " - " << tmp_name << ": " << "radio off" << "\n";
+            }
+            break;
     }
-
-    if ((msg->getKind() == SelfMsgType::RADIOINIT) or (msg->getKind() == SelfMsgType::TXRXTIMER))
-        delete msg;
-
 }
 void Radio::receiveFromNetwork(cMessage *msg)
 {
     if (isReceivedCorrectly(msg)) {
-                updateRadio(msg, RadioActivity::RECEIVING);
-                send(msg, "toLogic");
-            }
+        int msgSize = msg->par("msgSize");
+        int spreadingfactor = msg->par("spreadingfactor");
+        radioStatus = RadioActivity::RECEIVING;
+        busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
+        cMessage *radioUpdateReceive = new cMessage("radioUpdateReceive");
+        radioUpdateReceive->setKind(SelfMsgType::TXRXTIMER);
+        scheduleAt(busyUntil, radioUpdateReceive);
+        send(msg, "toLogic");
+    }
 }
 void Radio::sendToNetwork(cMessage *msg)
 {
-    msg->addPar("xpos") = position.x;
-          msg->addPar("ypos") = position.y;
-          msg->addPar("txPower") = txPower;
-          msg->addPar("channel") = 1; //TODO
-          msg->addPar("spreadingfactor") = 12; //TODO
-          if (keeper->returnRadioDevices().size() > 0)
-              updateRadio(msg, RadioActivity::TRANSMITTING);
-          for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
-          {
-              cModule *target =
-                      getParentModule()->getParentModule()->getSubmodule(
-                              device.name.c_str(), device.index);
-              sendDirect(msg->dup(), target, "radioIn");
-          }
-          delete msg;
+    if (msg == NULL) {
+        if (sendQueue.size() > 0) {
+            cMessage *msgFromQueue = sendQueue.front();
+            directSendWithDelete(msgFromQueue);
+            sendQueue.erase(sendQueue.begin());
+        }
+    }
+    else {
+        msg->addPar("xpos") = position.x;
+        msg->addPar("ypos") = position.y;
+        msg->addPar("txPower") = txPower;
+        msg->addPar("channel") = 1; //TODO
+        msg->addPar("spreadingfactor") = 12; //TODO
+        if ((radioStatus == RadioActivity::LISTENING) or (radioStatus == RadioActivity::RADIOOFF)) {
+            directSendWithDelete(msg);
+        }
+        else {
+            sendQueue.push_back(msg);
+        }
+    }
 }
-bool Radio::isReceivedCorrectly(cMessage *msg) { //TODO: add gateway exception - multiple receives
+void Radio::directSendWithDelete(cMessage *msg)
+{
+    if (keeper->returnRadioDevices().size() > 0) {
+        int msgSize = msg->par("msgSize");
+        int spreadingfactor = msg->par("spreadingfactor");
+        radioStatus = RadioActivity::TRANSMITTING;
+        busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
+        cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");
+        radioUpdateTransmission->setKind(SelfMsgType::TXRXTIMER);
+        scheduleAt(busyUntil, radioUpdateTransmission);
+    }
+    for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
+    {
+        cModule *target = getParentModule()->getParentModule()->getSubmodule(device.name.c_str(), device.index);
+        sendDirect(msg->dup(), target, "radioIn");
+    }
+    delete msg;
+}
+bool Radio::isReceivedCorrectly(cMessage *msg)
+{ //TODO: add gateway exception - multiple receives
     if (radioStatus == RadioActivity::LISTENING) {
         float rssi = getRssi(msg);
-        EV << "I'm " << deviceType << ", received packet with " << rssi << "\n";
         if (rssi > sensitivity) {
             return true;
         }
     }
-    EV << simTime() << " - " << tmp_name << ": "
-              << "msg not received. rejecting" << "\n";
     delete msg;
     return false;
 
 }
 
-double Radio::getRssi(cMessage *msg) {
+double Radio::getRssi(cMessage *msg)
+{
 //    std::cout << "Received from: " << msg->par("xpos").doubleValue() << ", "
 //            << msg->par("ypos").doubleValue() << "\n";
     double distance = sqrt(
-            pow(position.x - msg->par("xpos").doubleValue(), 2)
-                    + pow(position.y - msg->par("ypos").doubleValue(), 2));
+            pow(position.x - msg->par("xpos").doubleValue(), 2) + pow(position.y - msg->par("ypos").doubleValue(), 2));
     return calculateReceivedPower(msg->par("txPower").doubleValue(), distance);
 }
 
 double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lite
-        {
+{
     if (int(distance) == 0) {
         return pSend;
     }
@@ -233,7 +238,8 @@ double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lit
 
 }
 
-void Radio::updateDaytime() {
+void Radio::updateDaytime()
+{
     int64_t timeInMinutesFromTheBeginning = simTime().inUnit(SIMTIME_S) / 60;
     dayTime = timeInMinutesFromTheBeginning % (60 * 24);
 }
@@ -246,7 +252,7 @@ void Radio::updateDaytime() {
 //}
 
 double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading factor 7 - 12; parameter - rozmiar wiadomosci w bajtach
-        { //przeliczanie jak dlugo dana wiadomosc bedzie sie transmitowala - funkcja z symulacji Rafala
+{ //przeliczanie jak dlugo dana wiadomosc bedzie sie transmitowala - funkcja z symulacji Rafala
     double de = 0;
     if (sf == 11 || sf == 12)
         de = 1;
@@ -258,8 +264,7 @@ double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading facto
     double I18 = pow(2, sf) / (bandwidth * 1000) * 1000;
     double I19 = (preambleSymbols + 4.25) * I18;
     double roundUp = ceil(
-            ((8 * (msgSize + loraHeaderSize) - 4 * sf + 28 + 16
-                    - 20 * (1 - explicitHeader)) / (4 * (sf - 2 * de))))
+            ((8 * (msgSize + loraHeaderSize) - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) / (4 * (sf - 2 * de))))
             * codingRate;
     double maximum = fmax(roundUp, 0);
     double I20 = 8 + maximum;
