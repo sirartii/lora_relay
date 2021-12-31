@@ -19,6 +19,7 @@
 #include <omnetpp.h>
 #include "Keeper.h"
 #include <math.h>       /* log10 */
+#include <list>
 
 using namespace omnetpp;
 
@@ -36,9 +37,19 @@ struct RadioActivity {
     };
 };
 
+char *RadioActivityTypes[] =
+{
+    "UNKNOWN",
+    "RADIOOFF",
+    "LISTENING",
+    "RECEIVING",
+    "TRANSMITTING",
+    "TIMER"
+};
+
 struct SelfMsgType {
     enum ra {
-        UNKNOWN, RADIOINIT, WINDOWTIMER, TXRXTIMER
+        UNKNOWN, RADIOINIT, WINDOWTIMER, RXTIMER, TXTIMER, RXC, RX1, RX2
     };
 };
 
@@ -53,6 +64,7 @@ class Radio: public cSimpleModule {
 protected:
     virtual void initialize();
     virtual void handleMessage(cMessage *msg);
+    virtual void finish();
     bool isReceivedCorrectly(cMessage *msg);
     double getRssi(cMessage *msg);
     double calculateReceivedPower(float pSend, double distance);
@@ -76,13 +88,20 @@ protected:
     int dayTime;
     simtime_t busyUntil;
     std::string tmp_name;
-    std::vector<cMessage*> sendQueue;
+    std::list<cMessage> sendQueue;
 
-//    cMessage *radioStatusTimer;
+
+//    cMessage *radioRX1Timer;
+//    cMessage *radioRX2Timer;
+    cMessage *radioRXTimer;
+
     int listeningWindowStart1;
     int listeningWindowStart2;
     int listeningWindowDuration1;
     int listeningWindowDuration2;
+    double listeningWindowRX1;
+    double listeningWindowRX2;
+    double listeningWindowRXC;
     cOutVector radioStatusVector;
 };
 

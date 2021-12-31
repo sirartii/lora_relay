@@ -54,10 +54,20 @@ void Radio::initialize()
     radioInit->setKind(SelfMsgType::RADIOINIT);
     scheduleAt(simTime(), radioInit);
     radioStatus = RadioActivity::UNKNOWN;
+    radioRXTimer = new cMessage("radioUpdate-RXTimer");
+    radioRXTimer->addPar("windowIndex") = 0;
+//    radioRX1Timer = new cMessage("radioUpdate-RX1Timer");
+//    radioRX1Timer->setKind(SelfMsgType::RX1);
+//    radioRX2Timer = new cMessage("radioUpdate-RX2Timer");
+//    radioRX2Timer->setKind(SelfMsgType::RX2);
     listeningWindowStart1 = par("listeningWindowStart1").intValue();
     listeningWindowStart2 = par("listeningWindowStart2").intValue();
     listeningWindowDuration1 = par("listeningWindowDuration1").intValue();
     listeningWindowDuration2 = par("listeningWindowDuration2").intValue();
+    listeningWindowRX1 = par("listeningWindowRX1").doubleValue();
+    listeningWindowRX2 = par("listeningWindowRX2").doubleValue();
+    listeningWindowRXC = par("listeningWindowRXC").doubleValue();
+
     busyUntil = -1;
     if (deviceType != DevType::GATEWAY) {
         cMessage *timer_listeningWindowStart1 = new cMessage("listeningWindowStart1");
@@ -80,6 +90,16 @@ void Radio::initialize()
     WATCH(deviceType);
     WATCH(radioStatus);
     radioStatusVector.setName("radioStatus");
+
+//    cMessage w;
+//    w.addPar("val") = "zwykla";
+//    EV<<w.par("val") << "\n";
+//    cMessage* wp = new cMessage(w);
+//    w.par("val") = "zmiana";
+//    EV<<w.par("val") << "\n";
+//    EV<<wp->par("val") << "\n";
+
+
 }
 
 void Radio::handleMessage(cMessage *msg)
@@ -89,23 +109,66 @@ void Radio::handleMessage(cMessage *msg)
     if (msg->isSelfMessage()) {
         switch (msg->getKind()) {
             case SelfMsgType::RADIOINIT:
+                EV << " RADIOINIT \n";
                 updateRadio();
                 delete msg;
                 break;
             case SelfMsgType::WINDOWTIMER:
+                EV << " WINDOWTIMER \n";
                 scheduleAt(simTime() + 24 * 3600, msg);
                 updateRadio();
                 break;
-            case SelfMsgType::TXRXTIMER:
+            case SelfMsgType::TXTIMER:
+                EV << " TXTIMER \n";
+                updateRadio();
+                delete msg;
+                radioRXTimer->par("windowIndex") = 1;
+                radioRXTimer->setKind(SelfMsgType::RXC);
+                scheduleAt(simTime() + listeningWindowRXC, radioRXTimer);
+                break;
+            case SelfMsgType::RXC:
+                EV << " RXC \n";
+
+                if ((int) msg->par("windowIndex") == 1) {
+                    EV << " RXC windowIndex 1 \n";
+                    radioStatus = RadioActivity::LISTENING;
+                    msg->setKind(SelfMsgType::RX1);
+                    scheduleAt(simTime() + listeningWindowRX1, msg);
+                }
+                if ((int) msg->par("windowIndex") == 2) {
+                    EV << " RXC windowsIndex 2 \n";
+                    radioStatus = RadioActivity::LISTENING;
+                    msg->setKind(SelfMsgType::RX2);
+                    scheduleAt(simTime() + listeningWindowRX2, msg);
+                }
+                break;
+            case SelfMsgType::RX1:
+                EV << " RX1 \n";
+                updateRadio();
+                msg->par("windowIndex") = 2;
+                msg->setKind(SelfMsgType::RXC);
+                scheduleAt(simTime() + listeningWindowRXC, msg);
+                break;
+            case SelfMsgType::RX2:
+                EV << " RX2 \n";
+                updateRadio();
+                msg->par("windowIndex") = 0;
                 if (sendQueue.size() > 0) {
                     sendToNetwork(NULL);
-                }else
-                {
+                }
+                break;
+            case SelfMsgType::RXTIMER:
+                EV << " RXTIMER \n";
+                if (sendQueue.size() > 0) {
+                    sendToNetwork(NULL);
+                }
+                else {
                     updateRadio();
                 }
                 delete msg;
                 break;
             default:
+                EV << " default \n";
                 delete msg;
                 break;
         }
@@ -116,7 +179,7 @@ void Radio::handleMessage(cMessage *msg)
     else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
         receiveFromNetwork(msg);
     }
-    EV << simTime() << " - " << tmp_name << ": " << " radio status " << radioStatus << "\n";
+    EV << simTime() << " - " << tmp_name << ": " << " radio status " << RadioActivityTypes[radioStatus] << "\n";
     radioStatusVector.record(radioStatus);
 }
 
@@ -149,12 +212,13 @@ void Radio::updateRadio()
 void Radio::receiveFromNetwork(cMessage *msg)
 {
     if (isReceivedCorrectly(msg)) {
+        cancelEvent(radioRXTimer);
         int msgSize = msg->par("msgSize");
         int spreadingfactor = msg->par("spreadingfactor");
         radioStatus = RadioActivity::RECEIVING;
         busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
         cMessage *radioUpdateReceive = new cMessage("radioUpdateReceive");
-        radioUpdateReceive->setKind(SelfMsgType::TXRXTIMER);
+        radioUpdateReceive->setKind(SelfMsgType::RXTIMER);
         scheduleAt(busyUntil, radioUpdateReceive);
         send(msg, "toLogic");
     }
@@ -163,7 +227,7 @@ void Radio::sendToNetwork(cMessage *msg)
 {
     if (msg == NULL) {
         if (sendQueue.size() > 0) {
-            cMessage *msgFromQueue = sendQueue.front();
+            cMessage *msgFromQueue = new cMessage(sendQueue.front());
             directSendWithDelete(msgFromQueue);
             sendQueue.erase(sendQueue.begin());
         }
@@ -174,11 +238,13 @@ void Radio::sendToNetwork(cMessage *msg)
         msg->addPar("txPower") = txPower;
         msg->addPar("channel") = 1; //TODO
         msg->addPar("spreadingfactor") = 12; //TODO
-        if ((radioStatus == RadioActivity::LISTENING) or (radioStatus == RadioActivity::RADIOOFF)) {
+//        if ((radioStatus == RadioActivity::LISTENING) or (radioStatus == RadioActivity::RADIOOFF)) {
+        if ((radioStatus == RadioActivity::RADIOOFF) and !radioRXTimer->isScheduled()) {
             directSendWithDelete(msg);
         }
         else {
-            sendQueue.push_back(msg);
+            sendQueue.push_back(*msg);
+            delete msg;
         }
     }
 }
@@ -190,7 +256,7 @@ void Radio::directSendWithDelete(cMessage *msg)
         radioStatus = RadioActivity::TRANSMITTING;
         busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
         cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");
-        radioUpdateTransmission->setKind(SelfMsgType::TXRXTIMER);
+        radioUpdateTransmission->setKind(SelfMsgType::TXTIMER);
         scheduleAt(busyUntil, radioUpdateTransmission);
     }
     for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
@@ -273,7 +339,12 @@ double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading facto
 
     return formula / 1000.0;
 }
-
+void Radio::finish()
+{
+    cancelAndDelete(radioRXTimer);
+//    cancelAndDelete(radioRX1Timer);
+//    cancelAndDelete(radioRX2Timer);
+}
 //
 //
 //    def returnSpreadingFactor(self, SINR, minSINR):

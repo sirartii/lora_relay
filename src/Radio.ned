@@ -28,11 +28,14 @@ simple Radio
         int listeningWindowStart2;
         int listeningWindowDuration1;
         int listeningWindowDuration2;
-        
+        double listeningWindowRX1;
+        double listeningWindowRX2;
+        double listeningWindowRXC;
+
     gates:
-//        output radioOut;
+        //        output radioOut;
         input radioIn;
         output toLogic;
         input fromLogic;
-        
+
 }
