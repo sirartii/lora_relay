@@ -20,46 +20,15 @@
 #include "Keeper.h"
 #include <math.h>       /* log10 */
 #include <list>
-
+#include "common.h"
 using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
-struct DevType {
-    enum dt {
-        DEVUNKNOWN, ENDNODE, RELAY, GATEWAY
-    };
-};
+char *RadioActivityTypes[] = { "UNKNOWN", "RADIOOFF", "LISTENING", "RECEIVING", "TRANSMITTING", "TIMER" };
 
-struct RadioActivity {
-    enum ra {
-        UNKNOWN, RADIOOFF, LISTENING, RECEIVING, TRANSMITTING, TIMER
-    };
-};
-
-char *RadioActivityTypes[] =
+class Radio : public cSimpleModule
 {
-    "UNKNOWN",
-    "RADIOOFF",
-    "LISTENING",
-    "RECEIVING",
-    "TRANSMITTING",
-    "TIMER"
-};
-
-struct SelfMsgType {
-    enum ra {
-        UNKNOWN, RADIOINIT, WINDOWTIMER, RXTIMER, TXTIMER, RXC, RX1, RX2
-    };
-};
-
-struct Coords {
-    double x, y;
-};
-/**
- * Generates messages; see NED file for more info.
- */
-class Radio: public cSimpleModule {
 
 protected:
     virtual void initialize();
@@ -75,10 +44,10 @@ protected:
     void receiveFromNetwork(cMessage *msg);
     void directSendWithDelete(cMessage *msg);
 
-
 //    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
     double transmissionTimeInSec(int msgSize, int sf);
 
+    double rssiOfCurrentReceive;
     DevType::dt deviceType;
     RadioActivity::ra radioStatus;
     Keeper *keeper;
@@ -89,11 +58,15 @@ protected:
     simtime_t busyUntil;
     std::string tmp_name;
     std::list<cMessage> sendQueue;
-
+    bool listeningWindowRXRactive;
 
 //    cMessage *radioRX1Timer;
 //    cMessage *radioRX2Timer;
     cMessage *radioRXTimer;
+    cMessage *timer_listeningWindowStart1;
+    cMessage *timer_listeningWindowStop1;
+    cMessage *timer_listeningWindowStart2;
+    cMessage *timer_listeningWindowStop2;
 
     int listeningWindowStart1;
     int listeningWindowStart2;
@@ -101,7 +74,9 @@ protected:
     int listeningWindowDuration2;
     double listeningWindowRX1;
     double listeningWindowRX2;
+    double listeningWindowRXR;
     double listeningWindowRXC;
+    double listeningWindowRXCR;
     cOutVector radioStatusVector;
 };
 

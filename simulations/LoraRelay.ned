@@ -31,14 +31,14 @@ network LoraRelay
             @display("p=44.24,452.0775");
         }
         
-        endnode[2]: Endnode {
+        endnode[1]: Endnode {
         }
         
-        relay01: Relay {
-        }
-
-        relay02: Relay {
-        }
+//        relay01: Relay {
+//        }
+//
+//        relay02: Relay {
+//        }
 
         gateway: Gateway {
         }

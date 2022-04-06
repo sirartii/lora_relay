@@ -17,27 +17,33 @@
 #define __OPP_LORA_RELAY_OFFICIAL_LOGICENDNODE_H_
 
 #include <omnetpp.h>
+#include "common.h"
 
 using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
-/**
- * TODO - Generated class
- */
 class LogicEndnode : public cSimpleModule
 {
 public:
     LogicEndnode();
-   virtual ~LogicEndnode();
+    virtual ~LogicEndnode();
 
+private:
+    int dayTime; //minutes
+    int transmittingWindowStart1;
+    int transmittingWindowStart2;
+    int transmittingWindowDuration1;
+    int transmittingWindowDuration2;
+    cMessage *timerMessageWindow1;
+    cMessage *timerMessageWindow2;
+    short endDeviceState;
 
-  private:
-  cMessage *timerMessage;
-
-  protected:
+protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
+    void updateDaytime();
+
 };
 
 } //namespace

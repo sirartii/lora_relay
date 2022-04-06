@@ -28,9 +28,11 @@ simple Radio
         int listeningWindowStart2;
         int listeningWindowDuration1;
         int listeningWindowDuration2;
-        double listeningWindowRX1;
-        double listeningWindowRX2;
-        double listeningWindowRXC;
+        double listeningWindowRX1; //listening window 1 duration in seconds
+        double listeningWindowRX2; //listening window 2 duration in seconds
+        double listeningWindowRXR; //listening relay window duration in seconds
+        double listeningWindowRXC; //time between transmission and RX1, and beetween RX1 and RX2, in seconds
+        double listeningWindowRXCR; //time beetween RX2 and RXR, in seconds
 
     gates:
         //        output radioOut;

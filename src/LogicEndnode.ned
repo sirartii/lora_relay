@@ -22,6 +22,10 @@ simple LogicEndnode
 {
         parameters:
         volatile double sendInterval @unit(s) = default(exponential(60min));
+        int transmittingWindowStart1;
+        int transmittingWindowStart2;
+        int transmittingWindowDuration1;
+        int transmittingWindowDuration2;
 	gates:
         output logicOut;
         input logicIn;
