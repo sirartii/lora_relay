@@ -48,6 +48,9 @@ void LogicEndnode::initialize()
     timerMessageWindow2->setKind(SelfMsgType::TXWINDOW2);
     scheduleAt((transmittingWindowStart2 + intrand(transmittingWindowDuration2)) * 60, timerMessageWindow2);
 
+    //this->setDisplayName("Apulse")
+    //this->setDisplayString(dispstr)                //= 100 + getId() * 100;
+
     endDeviceState = EndDeviceState::INIT;
 }
 

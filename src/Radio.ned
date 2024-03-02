@@ -33,6 +33,11 @@ simple Radio
         double listeningWindowRXR; //listening relay window duration in seconds
         double listeningWindowRXC; //time between transmission and RX1, and beetween RX1 and RX2, in seconds
         double listeningWindowRXCR; //time beetween RX2 and RXR, in seconds
+        
+        double currentConsumptionRx; //current consumption in RX mode [mA]
+        double currentConsumptionTx; //current consumption in TX mode [mA]
+        
+        double energyConsumption = default(0);
 
     gates:
         //        output radioOut;

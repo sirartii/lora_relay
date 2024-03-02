@@ -31,6 +31,12 @@ class LogicRelay : public cSimpleModule
   protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
+
+  private:
+      int dayTime; //minutes
+      int endNodeID;
+      //cGate baseNode;
+
 };
 
 } //namespace

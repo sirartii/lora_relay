@@ -47,8 +47,8 @@ void Radio::initialize()
 
     keeper->registerMe(s, index);
 
-    position.x = getAncestorPar("xpos").doubleValue();
-    position.y = getAncestorPar("ypos").doubleValue();
+    //position.x = getAncestorPar("xpos").doubleValue();
+    //position.y = getAncestorPar("ypos").doubleValue();
     sensitivity = par("sensitivity").doubleValue();
     txPower = par("txPower").doubleValue();
     cMessage *radioInit = new cMessage("radioInit");
@@ -70,6 +70,9 @@ void Radio::initialize()
     listeningWindowRXR = par("listeningWindowRXR").doubleValue();
     listeningWindowRXC = par("listeningWindowRXC").doubleValue();
     listeningWindowRXCR = par("listeningWindowRXCR").doubleValue();
+
+    currentConsumptionRx = par("currentConsumptionRx").doubleValue();
+    currentConsumptionTx = par("currentConsumptionTx").doubleValue();
 
     busyUntil = -1;
     if (deviceType != DevType::GATEWAY) {
@@ -244,17 +247,22 @@ void Radio::updateRadio()
 }
 void Radio::receiveFromNetwork(cMessage *msg)
 {
+    double transmissionTime = 0;
+
     if (isReceivedCorrectly(msg)) {
         cancelEvent(radioRXTimer);
         int msgSize = msg->par("msgSize");
         int spreadingfactor = msg->par("spreadingfactor");
         radioStatus = RadioActivity::RECEIVING;
         rssiOfCurrentReceive = getRssi(msg);
-        busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
+        transmissionTime = transmissionTimeInSec(msgSize, spreadingfactor);
+        busyUntil = simTime() + transmissionTime;
         cMessage *radioUpdateReceive = new cMessage("radioUpdateReceive");
         radioUpdateReceive->setKind(SelfMsgType::RXTIMER);
         scheduleAt(busyUntil, radioUpdateReceive);
         send(msg, "toLogic");
+
+        this->energyConsumptionRx += transmissionTime * this->currentConsumptionRx;   //[mAs]
     }
     radioStatusVector.record(radioStatus);
 
@@ -288,13 +296,23 @@ void Radio::sendToNetwork(cMessage *msg)
 }
 void Radio::directSendWithDelete(cMessage *msg)
 {
+    double transmissionTime;
+
     if (keeper->returnRadioDevices().size() > 0) {
         int msgSize = msg->par("msgSize");
         int spreadingfactor = msg->par("spreadingfactor");
         radioStatus = RadioActivity::TRANSMITTING;
-        busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
+        transmissionTime = transmissionTimeInSec(msgSize, spreadingfactor);
+
+        busyUntil = simTime() + transmissionTime;
         cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");
         radioUpdateTransmission->setKind(SelfMsgType::TXTIMER);
+
+        this->energyConsumptionTx += transmissionTime * this->currentConsumptionTx;   //[mAs]
+        //**.energyConsumption = energyConsumptionTx + this->energyConsumptionRx;
+        //((LogicRelay*)getParentModule())->energyConsumption = 0;
+        this->par("energyConsumption").setDoubleValue(energyConsumptionTx + energyConsumptionRx);
+
         scheduleAt(busyUntil, radioUpdateTransmission);
     }
     for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying

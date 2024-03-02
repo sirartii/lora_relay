@@ -78,6 +78,12 @@ protected:
     double listeningWindowRXC;
     double listeningWindowRXCR;
     cOutVector radioStatusVector;
+
+    double currentConsumptionRx;
+    double currentConsumptionTx;
+    double energyConsumptionRx;
+    double energyConsumptionTx;
+    double energyConsumptionIdle;
 };
 
 }

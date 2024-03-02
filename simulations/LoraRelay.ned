@@ -15,6 +15,7 @@
 
 package opp_lora_relay_official.simulations;
 
+import ned.IUnidirectionalChannel;
 import opp_lora_relay_official.Endnode;
 import opp_lora_relay_official.Relay;
 import opp_lora_relay_official.Gateway;
@@ -25,15 +26,20 @@ import opp_lora_relay_official.Keeper;
 //
 network LoraRelay
 {
-    @display("bgb=1102,527");
+    parameters:
+        int numEndnodes = default(5);
+
+        @display("bgb=1102,527");
+    types:
     submodules:
         keeper: Keeper {
             @display("p=44.24,452.0775");
         }
-        
-        endnode[1]: Endnode {
+
+        endnode[numEndnodes]: Endnode {
+            @display("p=409.22,73.2725,m,5,100,100");
         }
-        
+
 //        relay01: Relay {
 //        }
 //
@@ -41,7 +47,19 @@ network LoraRelay
 //        }
 
         gateway: Gateway {
+
+            @display("p=222.5825,309.68002");
         }
+//        endnode1[1]: Endnode {
+//            @display("p=619.36005,345.625");
+//        }
+
+        relay01: Relay {
+            @display("p=810.145,479.7275");
+        }
+//
+//        relay02: Relay {
+//        }
 
     connections:
 

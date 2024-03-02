@@ -22,8 +22,8 @@ import opp_lora_relay_official.Distortion;
 module Endnode
 {
     parameters:
-        double xpos;
-        double ypos;
+        double xpos = default(100);
+        double ypos = default(100);
         @display("p=$xpos,$ypos;i=device/palm");
     gates:
         input radioIn @directIn;

@@ -20,13 +20,18 @@ namespace opp_lora_relay_official {
 Define_Module(LogicRelay);
 
 void LogicRelay::initialize() {
+    //baseNode = base;
     // TODO - Generated method body
 }
 
 void LogicRelay::handleMessage(cMessage *msg) {
     if (msg->isSelfMessage()) {
-
-    } else {
+        // discart
+    } else if (msg->getSenderGateId() == endNodeID) {
+        //send(msg,baseNode);
+        // TODO - retransmitt
+    }
+    else {
         if (msg->arrivedOn("logicIn")) {
             delete msg;
         }
