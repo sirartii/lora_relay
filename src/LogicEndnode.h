@@ -37,13 +37,13 @@ private:
     int transmittingWindowDuration2;
     cMessage *timerMessageWindow1;
     cMessage *timerMessageWindow2;
-    short endDeviceState;
+    EndDeviceState endDeviceState;
 
 protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
     void updateDaytime();
-
+    void updateLogicalState(EndDeviceState newState);
 };
 
 } //namespace

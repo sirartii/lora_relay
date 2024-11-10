@@ -14,6 +14,7 @@
 // 
 
 #include "LogicRelay.h"
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
@@ -25,10 +26,18 @@ void LogicRelay::initialize() {
 }
 
 void LogicRelay::handleMessage(cMessage *msg) {
-    if (msg->isSelfMessage()) {
-        // discart
-    } else if (msg->getSenderGateId() == endNodeID) {
-        //send(msg,baseNode);
+    if (msg->getSenderModule() == this) {
+        std::cout << this->getName() << " discarding self message";
+    }else if(msg->getKind() == (short)MsgType::WORRELAYJOIN) {
+        if (hasGUI()) {
+            char text[32];
+            sprintf(text, "Retransmission ", msg->getSenderModuleId());
+            this->getParentModule()->bubble(text);
+        }
+
+        send(msg,"logicOut");
+    }else if (msg->getSenderGateId() == endNodeID) {
+        send(msg,"logicOut");
         // TODO - retransmitt
     }
     else {

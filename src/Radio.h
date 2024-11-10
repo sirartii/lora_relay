@@ -26,6 +26,13 @@ using namespace omnetpp;
 namespace opp_lora_relay_official {
 
 char *RadioActivityTypes[] = { "UNKNOWN", "RADIOOFF", "LISTENING", "RECEIVING", "TRANSMITTING", "TIMER" };
+//char *RadioMessageTypes[] = { "JOIN_REQUEST", "RELAY_JOIN_REQUEST", "DATA_FRAME"}
+
+enum RadioFrameType {
+    JOIN_REQUEST = 0,
+    RELAY_JOIN_REQUEST = 1,
+    DATA_FRAME = 2,
+};
 
 class Radio : public cSimpleModule
 {
@@ -78,6 +85,7 @@ protected:
     double listeningWindowRXC;
     double listeningWindowRXCR;
     cOutVector radioStatusVector;
+    cOutVector energyConsumptionVector;
 
     double currentConsumptionRx;
     double currentConsumptionTx;

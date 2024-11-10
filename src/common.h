@@ -26,12 +26,13 @@ struct RadioActivity
     };
 };
 
-struct EndDeviceState
+enum EndDeviceState
 {
-    enum sm
-    {
-        UNKNOWN, INIT, UNSYNCHRONIZED, SYNCHRONIZED
-    };
+    OFFLINE,  //also init
+    JOIN_DIRECT,
+    JOIN_RELAY,
+    ONLINE_DIRECT,
+    ONLINE_RELAYED,
 };
 
 
@@ -47,7 +48,17 @@ struct MsgType
 {
     enum mt
     {
-        UNKNOWN, WORRELAYJOIN, WORRELAYUPLINK, JOINREQUEST, JOINACCEPT, FORWARDUPLINK, FORWARDDOWNLINK, UPLINK, DOWNLINK, ACK
+        UNKNOWN,
+        WORRELAYJOIN,
+        WORRELAYUPLINK,
+        WORRELAYJOINACCEPT,
+        JOINREQUEST,
+        JOINACCEPT,
+        FORWARDUPLINK,
+        FORWARDDOWNLINK,
+        UPLINK,
+        DOWNLINK,
+        ACK
     };
 };
 

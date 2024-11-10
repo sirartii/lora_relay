@@ -92,19 +92,15 @@ void Radio::initialize()
         timer_listeningWindowStop2->setKind(SelfMsgType::WINDOWTIMER);
         scheduleAt(simTime() + listeningWindowStart2 * 60 + listeningWindowDuration2 * 60, timer_listeningWindowStop2);
     }
+
     WATCH(busyUntil);
     WATCH(deviceType);
     WATCH(radioStatus);
-    radioStatusVector.setName("radioStatus");
-    rssiOfCurrentReceive = sensitivity-1;
 
-//    cMessage w;
-//    w.addPar("val") = "zwykla";
-//    EV<<w.par("val") << "\n";
-//    cMessage* wp = new cMessage(w);
-//    w.par("val") = "zmiana";
-//    EV<<w.par("val") << "\n";
-//    EV<<wp->par("val") << "\n";
+    radioStatusVector.setName("radioStatus");
+    energyConsumptionVector.setName("RxEnergyConsumption");
+
+    rssiOfCurrentReceive = sensitivity-1;
 
 }
 
@@ -209,6 +205,11 @@ void Radio::handleMessage(cMessage *msg)
     EV << simTime() << " - " << tmp_name << ": " << " radio status " << RadioActivityTypes[radioStatus] << "\n";
     radioStatusVector.record(radioStatus);
     EV << "Queue size is " << sendQueue.size() << "\n";
+
+    //todo:remove below, debug only
+//EV << this->getFullName() << " : " << (this->getParentModule())->getFullName() << " : " << arrivalGate->getName();
+
+    //if (this->gateType(gatename) == geteTyps::)
 }
 
 void Radio::updateRadio()
@@ -221,10 +222,10 @@ void Radio::updateRadio()
     }
     switch (deviceType) {
         case DevType::GATEWAY:
+        case DevType::RELAY:
             radioStatus = RadioActivity::LISTENING;
             EV << simTime() << " - " << tmp_name << ": " << "listening start" << "\n";
             break;
-        case DevType::RELAY:
         case DevType::ENDNODE:
             if (((dayTime >= listeningWindowStart1) and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
                     or ((dayTime >= listeningWindowStart2)
@@ -240,6 +241,9 @@ void Radio::updateRadio()
 
                 EV << simTime() << " - " << tmp_name << ": " << "radio off" << "\n";
             }
+            break;
+        case DevType::DEVUNKNOWN:
+            assert("Unknown module");
             break;
     }
     radioStatusVector.record(radioStatus);
@@ -263,6 +267,8 @@ void Radio::receiveFromNetwork(cMessage *msg)
         send(msg, "toLogic");
 
         this->energyConsumptionRx += transmissionTime * this->currentConsumptionRx;   //[mAs]
+
+        energyConsumptionVector.record(this->energyConsumptionRx);
     }
     radioStatusVector.record(radioStatus);
 
@@ -282,7 +288,10 @@ void Radio::sendToNetwork(cMessage *msg)
         msg->addPar("txPower") = txPower;
         msg->addPar("channel") = 1; //TODO
         msg->addPar("spreadingfactor") = 12; //TODO
-//        if ((radioStatus == RadioActivity::LISTENING) or (radioStatus == RadioActivity::RADIOOFF)) {
+
+
+        msg->setKind(MsgType::JOINREQUEST);
+
         if ((radioStatus == RadioActivity::RADIOOFF) and !radioRXTimer->isScheduled()) {
             directSendWithDelete(msg);
         }
@@ -407,6 +416,11 @@ double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading facto
 }
 void Radio::finish()
 {
+    recordScalar("Simulation duration", simTime());
+    EV  << "current consumption tx " << this->getFullName() << " " << this->energyConsumptionTx << " ";
+    EV  << "current consumption rx " << this->getFullName() << " " << this->energyConsumptionRx << " \n";
+
+
 //    cancelAndDelete(radioRXTimer);
 //    cancelAndDelete(timer_listeningWindowStart1);
 //    cancelAndDelete(timer_listeningWindowStop1);

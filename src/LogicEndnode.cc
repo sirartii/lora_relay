@@ -14,6 +14,7 @@
 // 
 
 #include "LogicEndnode.h"
+#include "LoRaPacket.h"
 
 namespace opp_lora_relay_official {
 
@@ -21,6 +22,7 @@ Define_Module(LogicEndnode);
 
 LogicEndnode::LogicEndnode()
 {
+
 //    timerMessage = NULL;
 }
 
@@ -51,7 +53,7 @@ void LogicEndnode::initialize()
     //this->setDisplayName("Apulse")
     //this->setDisplayString(dispstr)                //= 100 + getId() * 100;
 
-    endDeviceState = EndDeviceState::INIT;
+    updateLogicalState(EndDeviceState::OFFLINE);
 }
 
 void LogicEndnode::handleMessage(cMessage *msg)
@@ -69,14 +71,49 @@ void LogicEndnode::handleMessage(cMessage *msg)
                     simTime() - dayTime * 60 + (transmittingWindowStart2 + intrand(transmittingWindowDuration2)) * 60 + 24*3600,
                     msg);
         }
+
         cModule *parent = getParentModule();
-        cMessage *job = new cMessage(parent->getFullName());
-        job->addPar("msgSize") = 54; //TODO
+        cMessage *job = new LoRaPacket(parent->getFullName());
+
+        switch (endDeviceState){
+
+            case EndDeviceState::OFFLINE:
+            case EndDeviceState::JOIN_DIRECT:
+                job->setKind(MsgType::JOINREQUEST);
+                updateLogicalState(EndDeviceState::JOIN_DIRECT);
+                job->addPar("msgSize") = 15; //TODO
+                break;
+
+            case EndDeviceState::JOIN_RELAY:
+                job->setKind(MsgType::WORRELAYJOIN);
+                updateLogicalState(EndDeviceState::JOIN_RELAY);
+                job->addPar("msgSize") = 15; //TODO
+                break;
+
+            case EndDeviceState::ONLINE_DIRECT:
+                job->setKind(MsgType::UPLINK);
+                updateLogicalState(EndDeviceState::JOIN_DIRECT);
+                job->addPar("msgSize") = 54; //TODO
+                break;
+
+            default:
+                break;
+        }
+
+
+
         send(job, "logicOut");
 
     }
     else {
         if (msg->arrivedOn("logicIn")) {
+
+            if(msg->getKind() == MsgType::JOINACCEPT)
+                updateLogicalState(EndDeviceState::ONLINE_DIRECT);
+
+            if(msg->getKind() == MsgType::WORRELAYJOINACCEPT)
+                updateLogicalState(EndDeviceState::ONLINE_RELAYED);
+
             delete msg;
         }
     }
@@ -86,6 +123,36 @@ void LogicEndnode::updateDaytime()
 {
     int64_t timeInMinutesFromTheBeginning = simTime().inUnit(SIMTIME_S) / 60;
     dayTime = timeInMinutesFromTheBeginning % (60 * 24);
+}
+
+void LogicEndnode::updateLogicalState(EndDeviceState newState)
+{
+    this->endDeviceState = newState;
+
+
+    switch ((short)newState)
+    {
+        case EndDeviceState::OFFLINE:
+        this->getParentModule()->setDisplayString("i2=status/red");
+        break;
+
+        case EndDeviceState::JOIN_DIRECT:
+        this->getParentModule()->setDisplayString("i2=status/question");
+        break;
+
+        case EndDeviceState::JOIN_RELAY:
+        this->getParentModule()->setDisplayString("i2=status/bulb");
+        break;
+
+        case EndDeviceState::ONLINE_DIRECT:
+        this->getParentModule()->setDisplayString("i2=status/green");
+        break;
+
+        case EndDeviceState::ONLINE_RELAYED:
+        this->getParentModule()->setDisplayString("i2=status/yellow");
+        break;
+
+    }
 }
 
 } //namespace

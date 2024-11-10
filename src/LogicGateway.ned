@@ -23,4 +23,6 @@ simple LogicGateway
         gates:
         output logicOut;
         input logicIn;
+        
+        inout json;
 }

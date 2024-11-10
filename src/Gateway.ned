@@ -27,12 +27,13 @@ module Gateway
         @display("p=$xpos,$ypos;i=device/antennatower");
     gates:
         input radioIn @directIn;
-    //	    output radioOut;
+        inout json;
+    //	  output radioOut;
     submodules:
         radio: Radio {
             @display("p=342,203");
         }
-        logic: LogicRelay {
+        logic: LogicGateway {
             @display("p=228,33");
         }
         distortion: Distortion {
@@ -44,4 +45,6 @@ module Gateway
         radio.fromLogic <-- logic.logicOut;
         radio.toLogic --> distortion.in;
         distortion.out --> logic.logicIn;
+        
+        logic.json <--> json;
 }

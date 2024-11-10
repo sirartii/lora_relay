@@ -28,7 +28,11 @@ void LogicGateway::handleMessage(cMessage *msg) {
 
     } else {
         if (msg->arrivedOn("logicIn")) {
-            delete msg;
+            send(msg->dup(),"json$o");
+        }
+        if (msg->arrivedOn("json$i"))
+        {
+            send(msg->dup(),"logicOut");
         }
     }
 }

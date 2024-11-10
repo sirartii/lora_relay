@@ -36,9 +36,11 @@ O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 OBJS = \
     $O/Distortion.o \
     $O/Keeper.o \
+    $O/LNS.o \
     $O/LogicEndnode.o \
     $O/LogicGateway.o \
     $O/LogicRelay.o \
+    $O/LoRaPacket.o \
     $O/Radio.o \
     $O/Sink.o
 

@@ -20,6 +20,7 @@ import opp_lora_relay_official.Endnode;
 import opp_lora_relay_official.Relay;
 import opp_lora_relay_official.Gateway;
 import opp_lora_relay_official.Keeper;
+import opp_lora_relay_official.LNS;
 
 //
 // Sample network, consisting of a source and a sink.
@@ -33,11 +34,11 @@ network LoraRelay
     types:
     submodules:
         keeper: Keeper {
-            @display("p=44.24,452.0775");
+            @display("p=136.86751,452.0775");
         }
 
         endnode[numEndnodes]: Endnode {
-            @display("p=409.22,73.2725,m,5,100,100");
+            @display("p=535.0275,73.2725,m,5,100,100");
         }
 
 //        relay01: Relay {
@@ -48,19 +49,23 @@ network LoraRelay
 
         gateway: Gateway {
 
-            @display("p=222.5825,309.68002");
+            @display("p=410.6025,305.5325");
         }
 //        endnode1[1]: Endnode {
 //            @display("p=619.36005,345.625");
 //        }
 
         relay01: Relay {
-            @display("p=810.145,479.7275");
+            @display("p=743.78503,305.5325");
+        }
+
+        lns01: LNS {
+            @display("p=164.5175,305.5325");
         }
 //
 //        relay02: Relay {
 //        }
 
     connections:
-
+        gateway.json <--> lns01.json;
 }
