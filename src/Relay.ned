@@ -22,8 +22,6 @@ import opp_lora_relay_official.Distortion;
 module Relay
 {
     parameters:
-        double xpos;
-        double ypos;
         @display("p=$xpos,$ypos;i=device/accesspoint");
     gates:
         input radioIn @directIn;

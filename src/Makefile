@@ -40,6 +40,7 @@ OBJS = \
     $O/LogicEndnode.o \
     $O/LogicGateway.o \
     $O/LogicRelay.o \
+    $O/LogicIpBridge.o \
     $O/LoRaPacket.o \
     $O/Radio.o \
     $O/Sink.o

@@ -14,6 +14,7 @@
 // 
 
 #include "Radio.h"
+#include "LoRaPacket.h"
 
 namespace opp_lora_relay_official {
 
@@ -30,37 +31,55 @@ void Radio::initialize()
         index = parent->getIndex();
 
     std::cout << s << std::endl;
+    keeper = check_and_cast<Keeper*>(parent->getParentModule()->getSubmodule("keeper"));
 
     if (s.rfind("endnode", 0) == 0) {
         deviceType = DevType::ENDNODE;
+        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
+        //(check_and_cast<LogicEndnode*>(parent->getParentModule()))->myKeeperIndex = myKeeperIndex;
     }
     else if (s.rfind("relay", 0) == 0) {
         deviceType = DevType::RELAY;
+        myKeeperIndex =keeper->registerMe(s, index, deviceType, this);
     }
     else if (s.rfind("gateway", 0) == 0) {
         deviceType = DevType::GATEWAY;
+        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
+    }
+    else if (s.rfind("ipbridge", 0) == 0 || s.rfind("ipb", 0) == 0) {
+        deviceType = DevType::IPBRIDGE;               // lub nowy typ jeśli chcesz
+        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
     }
     else {
         deviceType = DevType::DEVUNKNOWN;
     }
-    keeper = check_and_cast<Keeper*>(parent->getParentModule()->getSubmodule("keeper"));
 
-    keeper->registerMe(s, index);
+    //cModule *parent = getParentModule();  // get the parent module
+    const char *pos = parent->getDisplayString().getTagArg("p", 0);  // x coordinate
+    const char *posY = parent->getDisplayString().getTagArg("p", 1); // y coordinate
+
+    position.x = atof(pos);
+    position.y = atof(posY);
+
 
     //position.x = getAncestorPar("xpos").doubleValue();
     //position.y = getAncestorPar("ypos").doubleValue();
-    sensitivity = par("sensitivity").doubleValue();
+
+
+    sensitivity = par("sensitivityAllRadios").doubleValue();
     txPower = par("txPower").doubleValue();
     cMessage *radioInit = new cMessage("radioInit");
     radioInit->setKind(SelfMsgType::RADIOINIT);
     scheduleAt(simTime(), radioInit);
-    radioStatus = RadioActivity::UNKNOWN;
+
+    radioActivity = RadioActivity::UNKNOWN;
+    updateRadioActivity(RadioActivity::RADIOOFF);
+
     radioRXTimer = new cMessage("radioUpdate-RXTimer");
     radioRXTimer->addPar("windowIndex") = 0;
-//    radioRX1Timer = new cMessage("radioUpdate-RX1Timer");
-//    radioRX1Timer->setKind(SelfMsgType::RX1);
-//    radioRX2Timer = new cMessage("radioUpdate-RX2Timer");
-//    radioRX2Timer->setKind(SelfMsgType::RX2);
+    retransmissionModel = (RetransmissionModel) par("retransmissionModel").intValue();
+
+
     listeningWindowStart1 = par("listeningWindowStart1").intValue();
     listeningWindowStart2 = par("listeningWindowStart2").intValue();
     listeningWindowDuration1 = par("listeningWindowDuration1").intValue();
@@ -73,9 +92,18 @@ void Radio::initialize()
 
     currentConsumptionRx = par("currentConsumptionRx").doubleValue();
     currentConsumptionTx = par("currentConsumptionTx").doubleValue();
+    currentConsumptionIdle = par("currentConsumptionIdle").doubleValue();
+    currentConsumptionWOR = par("currentConsumptionWOR").doubleValue();
+
+    energyConsumptionRx = 0;
+    energyConsumptionTx = 0;
+    energyConsumptionIdle = 0;
+    energyConsumptionWOR = 0;
+
+    collisionCount = 0;
 
     busyUntil = -1;
-    if (deviceType != DevType::GATEWAY) {
+    if (deviceType != DevType::GATEWAY && deviceType != DevType::RELAY) {
         timer_listeningWindowStart1 = new cMessage("listeningWindowStart1");
         timer_listeningWindowStart1->setKind(SelfMsgType::WINDOWTIMER);
         scheduleAt(simTime() + listeningWindowStart1 * 60, timer_listeningWindowStart1);
@@ -94,70 +122,92 @@ void Radio::initialize()
     }
 
     WATCH(busyUntil);
-    WATCH(deviceType);
-    WATCH(radioStatus);
+    WATCH(radioActivity);
+    WATCH(collisionCount);
 
-    radioStatusVector.setName("radioStatus");
-    energyConsumptionVector.setName("RxEnergyConsumption");
+    WATCH(energyConsumptionRx);
+    WATCH(energyConsumptionTx);
+    WATCH(energyConsumptionIdle);
+    if (deviceType == DevType::RELAY)
+        WATCH(energyConsumptionWOR);
 
     rssiOfCurrentReceive = sensitivity-1;
+    currentRcvMessage = nullptr;
+    radioUpdateReceive = nullptr;
 
+
+    wakeupRelay = registerSignal("wakeupRelay");
+
+    if(deviceType == DevType::RELAY)
+        getSimulation()->getSystemModule()->subscribe("wakeupRelay", this);
 }
-
 void Radio::handleMessage(cMessage *msg)
 {
     updateDaytime();
+    //LoRaPacket *timeoutPkt;
     cGate *arrivalGate = msg->getArrivalGate();
+
     if (msg->isSelfMessage()) {
         switch (msg->getKind()) {
             case SelfMsgType::RADIOINIT:
-                EV << " RADIOINIT \n";
+                EV << simTime() << " RADIOINIT \n";
                 updateRadio();
                 delete msg;
                 break;
             case SelfMsgType::WINDOWTIMER:
-                EV << " WINDOWTIMER \n";
+                EV << simTime() << " WINDOWTIMER \n";
                 scheduleAt(simTime() + 24 * 3600, msg);
                 updateRadio();
                 break;
             case SelfMsgType::TXTIMER:
-                EV << " TXTIMER \n";
+                EV << simTime() << " TXTIMER \n";
+                getParentModule()->getDisplayString().setTagArg("r",0,"0");
                 updateRadio();
                 delete msg;
-                radioRXTimer->par("windowIndex") = 1;
-                radioRXTimer->setKind(SelfMsgType::RXC);
-                scheduleAt(simTime() + listeningWindowRXC, radioRXTimer);
+                if (deviceType != DevType::GATEWAY && !disableLAT)
+                {
+                    radioRXTimer->par("windowIndex") = 1;
+                    radioRXTimer->setKind(SelfMsgType::RXC);
+                    if (!radioRXTimer->isScheduled())
+                        scheduleAt(simTime() + listeningWindowRXC, radioRXTimer);
+                }
+                disableLAT = false;
                 break;
             case SelfMsgType::RXC:
-                EV << " RXC \n";
+                EV << simTime() << " RXC \n";
                 if ((int) msg->par("windowIndex") == 1) {
-                    EV << " RXC windowIndex 1 \n";
-                    radioStatus = RadioActivity::LISTENING;
+                    EV << simTime() << " RXC windowIndex 1 \n";
+                    updateRadioActivity(RadioActivity::LISTENING);
+                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RX1");        //display bubble
                     msg->setKind(SelfMsgType::RX1);
                     scheduleAt(simTime() + listeningWindowRX1, msg);
                 }
                 if ((int) msg->par("windowIndex") == 2) {
-                    EV << " RXC windowIndex 2 \n";
-                    radioStatus = RadioActivity::LISTENING;
+                    EV << simTime() << " RXC windowIndex 2 \n";
+                    updateRadioActivity(RadioActivity::LISTENING);
+                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RX2");        //display bubble
                     msg->setKind(SelfMsgType::RX2);
                     scheduleAt(simTime() + listeningWindowRX2, msg);
                 }
                 if ((int) msg->par("windowIndex") == 3) {
-                    EV << " RXCR windowIndex 3 \n";
-                    radioStatus = RadioActivity::LISTENING;
+                    EV << simTime() << " RXCR windowIndex 3 \n";
+                    updateRadioActivity(RadioActivity::LISTENING);
+                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RXR");        //display bubble
                     msg->setKind(SelfMsgType::RXR);
                     scheduleAt(simTime() + listeningWindowRXR, msg);
                 }
                 break;
             case SelfMsgType::RX1:
-                EV << " RX1 \n";
+                EV << simTime() << " RX1 \n";
+                getParentModule()->getDisplayString().setTagArg("t",0,"...");        //display bubble
                 updateRadio();
                 msg->par("windowIndex") = 2;
                 msg->setKind(SelfMsgType::RXC);
                 scheduleAt(simTime() + listeningWindowRXC, msg);
                 break;
             case SelfMsgType::RX2:
-                EV << " RX2 \n";
+                EV << simTime() << " RX2 \n";
+                getParentModule()->getDisplayString().setTagArg("t",0,"...");        //display bubble
                 updateRadio();
                 if (listeningWindowRXRactive) {
                     msg->par("windowIndex") = 3;
@@ -172,197 +222,374 @@ void Radio::handleMessage(cMessage *msg)
                 }
                 break;
             case SelfMsgType::RXR:
-                EV << " RXR \n";
+                EV << simTime() << " RXR \n";
+                getParentModule()->getDisplayString().setTagArg("t",0,"");
                 updateRadio();
 
-                msg->par("windowIndex") = 0;
+                /*
+                timeoutPkt = new LoRaPacket("timeout",0);
+                timeoutPkt->setKind(MsgType::TIMEOUT);
+                sendToNetwork(timeoutPkt);
+                */
+
                 if (sendQueue.size() > 0) {
                     sendToNetwork(NULL);
                 }
                 break;
+
+            //Below case indicate that the message was correctly received. No disruption during transmission.
             case SelfMsgType::RXTIMER:
-                EV << " RXTIMER \n";
+                if (currentRcvMessage != nullptr){
+                    send(currentRcvMessage, "toLogic");
+                    EV << "RADIO " << tmp_name << " t=" << simTime() << " rcv ok, sending to logic\n";
+                }
+
+                getParentModule()->getDisplayString().setTagArg("t",0,"");
                 if (sendQueue.size() > 0) {
                     sendToNetwork(NULL);
                 }
                 else {
                     updateRadio();
                 }
-                delete msg;
+
+                currentRcvMessage = nullptr;
+                delete msg;         //special object was created for the event so it's time to remove unused object
                 break;
+
+            //case SelfMsgType::
+
             default:
-                EV << " default \n";
+                EV << tmp_name << " default \n";
                 delete msg;
                 break;
         }
     }
     else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
-        sendToNetwork(msg);
+        if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
+            sendToNetwork((LoRaPacket*)msg);
+        else
+            //TODO: control messages to enable radio listen etc
+            EV << "RADIO " << tmp_name << " Got unknown packet to send " << this->getParentModule()->getFullName() << " \n";
+
     }
     else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
-        receiveFromNetwork(msg);
+        if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
+            receiveFromNetwork((LoRaPacket*)msg);
+        else
+            EV << "RADIO " << tmp_name << " t="<< simTime() <<" Got unknown packet via radio " << this->getParentModule()->getFullName() << " \n";
     }
-    EV << simTime() << " - " << tmp_name << ": " << " radio status " << RadioActivityTypes[radioStatus] << "\n";
-    radioStatusVector.record(radioStatus);
-    EV << "Queue size is " << sendQueue.size() << "\n";
 
-    //todo:remove below, debug only
-//EV << this->getFullName() << " : " << (this->getParentModule())->getFullName() << " : " << arrivalGate->getName();
-
-    //if (this->gateType(gatename) == geteTyps::)
 }
-
+void Radio::receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)
+{
+    if (id == wakeupRelay && deviceType == DevType::RELAY && retransmissionModel == RetransmissionModel::EP431)
+    {
+        // TODO - check closest relay
+        if ((radioActivity != RadioActivity::RECEIVING) and (radioActivity != RadioActivity::TRANSMITTING))
+        {
+            Enter_Method("receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)");
+            updateRadioActivity(RadioActivity::LISTENING);
+            getParentModule()->getDisplayString().setTagArg("t",0,"Listening rly");               //unable to execute gui command (wrong thered?)
+            scheduleAt(simTime() + value, new cMessage("Relay required", SelfMsgType::RXR));
+            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "RL enabled to listen for ED\n";
+        }
+    }
+}
 void Radio::updateRadio()
 {
-    radioStatusVector.record(radioStatus);
-
-    if (((radioStatus == RadioActivity::RECEIVING) or (radioStatus == RadioActivity::TRANSMITTING))
+    if (((radioActivity == RadioActivity::RECEIVING) or (radioActivity == RadioActivity::TRANSMITTING))
             and (simTime() < busyUntil)) {
         return;
     }
     switch (deviceType) {
         case DevType::GATEWAY:
+            updateRadioActivity(RadioActivity::LISTENING);
+            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "listening start" << "\n";
+            getParentModule()->getDisplayString().setTagArg("t",0,"Listening");
+            break;
         case DevType::RELAY:
-            radioStatus = RadioActivity::LISTENING;
-            EV << simTime() << " - " << tmp_name << ": " << "listening start" << "\n";
+            if (currentRcvMessage && currentRcvMessage->isWOR())
+            {
+                updateRadioActivity(RadioActivity::LISTENING);
+                getParentModule()->getDisplayString().setTagArg("t",0,"Listening msg after WOR");
+            }
+            else
+            {
+                if (retransmissionModel == TS011)
+                {
+                    updateRadioActivity(RadioActivity::WOR);
+                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening WOR");
+                }
+                if (retransmissionModel == EP431)
+                {
+                    updateRadioActivity(RadioActivity::RADIOOFF);
+                    getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
+                }
+            }
             break;
         case DevType::ENDNODE:
             if (((dayTime >= listeningWindowStart1) and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
                     or ((dayTime >= listeningWindowStart2)
                             and (dayTime < listeningWindowStart2 + listeningWindowDuration2))) {
-                radioStatus = RadioActivity::LISTENING;
+                updateRadioActivity(RadioActivity::LISTENING);
                 rssiOfCurrentReceive = sensitivity-1;
 
-                EV << simTime() << " - " << tmp_name << ": " << "listening start" << "\n";
+                EV << " RADIO " << tmp_name << " t=" << simTime() << " listening start" << "\n";
             }
             else {
-                radioStatus = RadioActivity::RADIOOFF;
+                updateRadioActivity(RadioActivity::RADIOOFF);
                 rssiOfCurrentReceive = sensitivity-1;
 
-                EV << simTime() << " - " << tmp_name << ": " << "radio off" << "\n";
+                EV << " RADIO " << tmp_name << " t=" << simTime() << " radio off" << "\n";
             }
             break;
+
+        case DevType::IPBRIDGE:
+            updateRadioActivity(RadioActivity::LISTENING);
+            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "listening start" << "\n";
+            getParentModule()->getDisplayString().setTagArg("t",0,"Listening");
+            break;
+
         case DevType::DEVUNKNOWN:
             assert("Unknown module");
             break;
     }
-    radioStatusVector.record(radioStatus);
-
 }
-void Radio::receiveFromNetwork(cMessage *msg)
+void Radio::receiveFromNetwork(LoRaPacket *msg)
 {
-    double transmissionTime = 0;
+    float transmissionTime = 0;
+    double rssi = 0;
+    double realSensitivity;
 
-    if (isReceivedCorrectly(msg)) {
-        cancelEvent(radioRXTimer);
-        int msgSize = msg->par("msgSize");
-        int spreadingfactor = msg->par("spreadingfactor");
-        radioStatus = RadioActivity::RECEIVING;
-        rssiOfCurrentReceive = getRssi(msg);
-        transmissionTime = transmissionTimeInSec(msgSize, spreadingfactor);
-        busyUntil = simTime() + transmissionTime;
-        cMessage *radioUpdateReceive = new cMessage("radioUpdateReceive");
-        radioUpdateReceive->setKind(SelfMsgType::RXTIMER);
-        scheduleAt(busyUntil, radioUpdateReceive);
-        send(msg, "toLogic");
+    bool rcvOK = 0;
 
-        this->energyConsumptionRx += transmissionTime * this->currentConsumptionRx;   //[mAs]
-
-        energyConsumptionVector.record(this->energyConsumptionRx);
+    //verify colisions with transmission:
+    if (radioActivity == RadioActivity::TRANSMITTING)              //for gateway colistion is not possible
+    {
+        collisionCount++;
+        this->getParentModule()->bubble("Tx collision");
+        keeper->recordColision(this->myKeeperIndex, msg->getSenderModuleId());
+        dropByCollision(msg);
+        return;
     }
-    radioStatusVector.record(radioStatus);
 
+    //calc RSS based on distance from transmitter
+    rssi = getRssi((LoRaPacket*)msg);
+
+    //calculate sensitivity based on keeper distortion activity
+    realSensitivity = sensitivity + sqrt(keeper->distortionLevel);
+
+    //apply random variation based on signal observation
+    double currentPL = normal(0, par("pathlosStd"));
+    rssi += currentPL;
+
+    msg->rssi = rssi;
+
+    EV << "RADIO " << tmp_name << " t=" << simTime() << " frame " << msg->getKind() << " RSSI = " << rssi << " PLR = "<<currentPL <<" ";
+
+    if (radioActivity == RadioActivity::LISTENING) {
+        if (rssi > realSensitivity) {
+            EV << "\033[1;32m received ok \033[0m\n";
+            rcvOK =  true;
+        }
+        else
+        {
+            EV << "\033[1;31m below threshold\033[0m " << realSensitivity << "\n";
+        }
+    }
+    else if (radioActivity == RadioActivity::RECEIVING) {
+        //New signal stronger than existing more than 6dBm. Current msg will be discarted new will start receiving
+        if (rssi > rssiOfCurrentReceive + 6) {
+            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision capture" << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
+            this->getParentModule()->bubble("Rx col. ex");
+            dropByCollision(currentRcvMessage);
+            currentRcvMessage = nullptr;
+            rcvOK = true;
+        }
+        //New signal is 6dBm weaker than current receive. Current msg will not be affected.
+        else if (rssi < rssiOfCurrentReceive - 6) {
+            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision no break " << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
+            this->getParentModule()->bubble("Rx col. new");
+            dropByCollision(msg);
+            rcvOK =  false;
+        }
+        //RSSI of new frame simmilar to currently received. Both frames are broken
+        else {
+            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision both current=" << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
+            keeper->recordColision(this->myKeeperIndex, msg->getSenderModuleId());
+            this->getParentModule()->bubble("Rx col. both");
+            rcvOK = false;
+            dropByCollision(currentRcvMessage);
+            dropByCollision(msg);
+            currentRcvMessage = nullptr;
+        }
+    }
+    else if (radioActivity == RadioActivity::WOR || radioActivity == RadioActivity::EWOR) {
+        if (rssi > realSensitivity && msg->isWOR())
+        {
+            this->getParentModule()->bubble("Woke up from WOR!");
+            rcvOK = true;
+        }
+    }
+    else
+    {
+        rcvOK = false;
+    }
+
+    if (rcvOK) {
+
+        transmissionTime = ((LoRaPacket*)msg)->calcMsgDuration();
+        EV << "RADIO " << tmp_name << " t=" << simTime() << " Msg receiving, len= " << transmissionTime << "[s]\n";
+        getParentModule()->getDisplayString().setTagArg("t",0,"RECEIVING");
+
+        //if (radioUpdateReceive != nullptr && radioUpdateReceive->isScheduled())                  //jak nie ustawione to wywala się
+        //    cancelEvent(radioRXTimer);
+
+        updateRadioActivity(RadioActivity::RECEIVING);
+
+        busyUntil = simTime() + transmissionTime;
+        //if (radioUpdateReceive == nullptr)
+            radioUpdateReceive = new cMessage("radioUpdateReceive",SelfMsgType::RXTIMER);
+
+        scheduleAt(busyUntil, radioUpdateReceive);
+        currentRcvMessage = ((LoRaPacket*)msg)->dupLoRa();
+
+        //this->energyConsumptionRx += transmissionTime * this->currentConsumptionRx;   //[mAs]
+        //energyConsumptionVector.record(this->energyConsumptionRx);
+    }
+
+    keeper->recordFrameReception(this->myKeeperIndex, msg->getSenderModuleId(), rssi, rcvOK);
+    rssiOfCurrentReceive = rssi;
 }
-void Radio::sendToNetwork(cMessage *msg)
+void Radio::dropByCollision(LoRaPacket* lp)
+{
+    if (!lp) return; // safety
+
+    lp->autodetectUplink();
+
+    long devIdx = lp->par("KeeperIndex").longValue();
+    long pktId  = lp->par("PacketId").longValue();
+
+    EV << simTime() << " [Radio] Drop by COLLISION: dev=" << devIdx
+       << " pkt=" << pktId << " dir=" << (lp->isUplink ? "UL" : "DL") << "\n";
+
+    if (keeper) {
+        if (lp->isUplink)
+            keeper->reportUplinkCollision(devIdx, pktId);
+        else
+            keeper->reportDownlinkCollision(devIdx, pktId);
+    }
+    collisionCount++;
+    delete lp; // kończymy żywot pakietu
+}
+
+void Radio::sendToNetwork(LoRaPacket *msg)
 {
     if (msg == NULL) {
         if (sendQueue.size() > 0) {
-            cMessage *msgFromQueue = new cMessage(sendQueue.front());
+            LoRaPacket *msgFromQueue = new LoRaPacket(sendQueue.front());
             directSendWithDelete(msgFromQueue);
             sendQueue.erase(sendQueue.begin());
         }
     }
     else {
-        msg->addPar("xpos") = position.x;
-        msg->addPar("ypos") = position.y;
-        msg->addPar("txPower") = txPower;
-        msg->addPar("channel") = 1; //TODO
-        msg->addPar("spreadingfactor") = 12; //TODO
-
-
-        msg->setKind(MsgType::JOINREQUEST);
-
-        if ((radioStatus == RadioActivity::RADIOOFF) and !radioRXTimer->isScheduled()) {
-            directSendWithDelete(msg);
-        }
-        else {
-            sendQueue.push_back(*msg);
-            delete msg;
-        }
+       directSendWithDelete(msg);
     }
-    radioStatusVector.record(radioStatus);
-
 }
-void Radio::directSendWithDelete(cMessage *msg)
+void Radio::directSendWithDelete(LoRaPacket *msg)
 {
     double transmissionTime;
 
-    if (keeper->returnRadioDevices().size() > 0) {
-        int msgSize = msg->par("msgSize");
-        int spreadingfactor = msg->par("spreadingfactor");
-        radioStatus = RadioActivity::TRANSMITTING;
-        transmissionTime = transmissionTimeInSec(msgSize, spreadingfactor);
+    if (keeper->returnRadioDevices().size() > 0 && dynamic_cast<LoRaPacket *>(msg) != nullptr)
+    {
+        LoRaPacket *job;
+        job = (LoRaPacket*)msg;
+        job->senderPositionX = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
+        job->senderPositionY = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
+        job->transmissionPower = txPower;
+        job->channel = 1; //TODO
+        job->spreadingFactor = 12; //TODO
+
+        //int msgSize = job->length;
+        //int spreadingfactor = job->spreadingFactor;
+
+        updateRadioActivity(RadioActivity::TRANSMITTING);
+        transmissionTime = job->calcMsgDuration(); //transmissionTimeInSec(msgSize, spreadingfactor);
 
         busyUntil = simTime() + transmissionTime;
-        cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");
-        radioUpdateTransmission->setKind(SelfMsgType::TXTIMER);
 
-        this->energyConsumptionTx += transmissionTime * this->currentConsumptionTx;   //[mAs]
-        //**.energyConsumption = energyConsumptionTx + this->energyConsumptionRx;
-        //((LogicRelay*)getParentModule())->energyConsumption = 0;
-        this->par("energyConsumption").setDoubleValue(energyConsumptionTx + energyConsumptionRx);
+        cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");       //to chyba nie powinno tak wygl�da�. Pwinna by� jedna wiadomo�� w k�ko wysy�ana jak mechanizm self-frame
+        radioUpdateTransmission->setKind(SelfMsgType::TXTIMER);
+        if (msg->getKind() == MsgType::MSGWOR)
+            disableLAT = true;
+
+        //this->energyConsumptionTx += transmissionTime * this->currentConsumptionTx;   //[mAs]     //replaced with updateRadioActivity()
+        //this->par("energyConsumption").setDoubleValue(energyConsumptionTx + energyConsumptionRx);
 
         scheduleAt(busyUntil, radioUpdateTransmission);
+        EV << "RADIO" << tmp_name << " t=" << simTime() << " Sending radio frame "<< job->GetPacketName() << "\n";
+
+        getParentModule()->getDisplayString().setTagArg("r",0,"200");
     }
     for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
     {
-        cModule *target = getParentModule()->getParentModule()->getSubmodule(device.name.c_str(), device.index);
-        sendDirect(msg->dup(), target, "radioIn");
-    }
-    radioStatusVector.record(radioStatus);
 
-    delete msg;
+        //cModule *target = getParentModule()->getParentModule()->getSubmodule(device.name.c_str(), device.index);
+        if (device.radio == nullptr)
+            continue;
+
+        if (device.radio == this)       //nie wysyłaj do siebie
+            continue;
+
+        // filter: skip devices whose radio is OFF or UNKNOWN
+        if (device.radio->isOffOrUnknown()) {
+            continue;
+        }
+
+        std::string s = device.radio->getParentModule()->getFullName();
+        if (deviceType == DevType::ENDNODE)
+        {
+            if (s.rfind("endnode", 0) == std::string::npos){
+                sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
+            }
+        } else {
+            sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
+        }
+        //if (((Radio*)target)->isListening())
+    }
+    keeper->recordFrameTransmission(myKeeperIndex, msg->calcMsgDuration());
+
+    delete (LoRaPacket*)msg;
 }
-bool Radio::isReceivedCorrectly(cMessage *msg)
-{ //TODO: add gateway exception - multiple receives
-    radioStatusVector.record(radioStatus);
-
-    float rssi = getRssi(msg);
-    if (radioStatus == RadioActivity::LISTENING) {
-        if (rssi > sensitivity) {
-            return true;
-        }
-    }
-    if (radioStatus == RadioActivity::RECEIVING) {
-        if (rssi > sensitivity) {
-            if ((rssi > rssiOfCurrentReceive+6) || (rssi < rssiOfCurrentReceive-6))
-            return true;
-        }
-    }
-    delete msg;
+bool Radio::isReceivedCorrectly(cMessage *msg, double rssi)
+{
+    //delete msg;
     return false;
 
 }
 
-double Radio::getRssi(cMessage *msg)
+bool Radio::isListening()
 {
-//    std::cout << "Received from: " << msg->par("xpos").doubleValue() << ", "
-//            << msg->par("ypos").doubleValue() << "\n";
-    double distance = sqrt(
-            pow(position.x - msg->par("xpos").doubleValue(), 2) + pow(position.y - msg->par("ypos").doubleValue(), 2));
-    return calculateReceivedPower(msg->par("txPower").doubleValue(), distance);
-}
+    if (deviceType == DevType::GATEWAY)
+        return true;
 
+    if (deviceType == DevType::RELAY)
+        return true;
+
+    return (radioActivity == RadioActivity::LISTENING);
+}
+double Radio::getRssi(LoRaPacket *msg)
+{
+    position.x = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
+    position.y = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
+
+    double distance = sqrt(
+            pow(position.x - msg->senderPositionX, 2) + pow(position.y - msg->senderPositionY, 2));
+
+     EV << "RADIO" << tmp_name << " t=" << simTime() <<" Verify receive from: " << msg->senderPositionX << ", " << msg->senderPositionY << " distance: " << distance << "m\n";
+
+    return calculateReceivedPower(msg->transmissionPower, distance);
+}
 double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lite
 {
     if (int(distance) == 0) {
@@ -370,11 +597,12 @@ double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lit
     }
     float K1 = 127.5;
     float K2 = 35.2;
-    float PL = K1 + K2 * log10(distance / 1000.0);
+    float PL = K1 + K2 * log10(distance / 500.0);           //deeper distortion affects RSSI
 
     float pRec = pSend - PL;
     if (pRec > pSend)
         pRec = pSend;
+
     return pRec;
 
 }
@@ -385,12 +613,52 @@ void Radio::updateDaytime()
     dayTime = timeInMinutesFromTheBeginning % (60 * 24);
 }
 
-//void Radio::setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae) {
-//    int msgSize = msg->par("msgSize");
-//    int spreadingfactor = msg->par("spreadingfactor");
-//    radioStatus = rae;
-//    busyUntil = simTime() + transmissionTimeInSec(msgSize, spreadingfactor);
-//}
+void Radio::updateRadioActivity(RadioActivity::ra newRA)
+{
+    double duration = (simTime() - lastRadioActivityChange).dbl();
+
+    switch (radioActivity)
+    {
+        case RadioActivity::UNKNOWN:    //first init only
+            break;
+
+        case RadioActivity::RADIOOFF:
+        case RadioActivity::TIMER:
+            energyConsumptionIdle += duration * currentConsumptionIdle;
+            break;
+
+        case RadioActivity::RECEIVING:
+        case RadioActivity::LISTENING:
+            energyConsumptionRx += duration * currentConsumptionRx;
+            break;
+
+
+        case RadioActivity::EWOR:
+        case RadioActivity::WOR:
+            energyConsumptionWOR += duration * currentConsumptionWOR;
+            break;
+
+        case RadioActivity::TRANSMITTING:
+            energyConsumptionTx += duration * currentConsumptionTx;
+            break;
+    }
+
+    radioActivity = newRA;
+    lastRadioActivityChange = simTime();
+
+    keeper->recordEnergyConsumption(myKeeperIndex, energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx + energyConsumptionWOR);
+}
+
+/*
+ * Offset current [uA]
+261,20  FS12
+150,65
+70,51
+41,56
+25,68
+16,90   SF7
+ *
+ */
 
 double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading factor 7 - 12; parameter - rozmiar wiadomosci w bajtach
 { //przeliczanie jak dlugo dana wiadomosc bedzie sie transmitowala - funkcja z symulacji Rafala
@@ -414,46 +682,19 @@ double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading facto
 
     return formula / 1000.0;
 }
+
+bool Radio::isOffOrUnknown() const noexcept {
+    return (radioActivity == RadioActivity::RADIOOFF)
+        || (radioActivity == RadioActivity::UNKNOWN);
+}
+
 void Radio::finish()
 {
-    recordScalar("Simulation duration", simTime());
-    EV  << "current consumption tx " << this->getFullName() << " " << this->energyConsumptionTx << " ";
-    EV  << "current consumption rx " << this->getFullName() << " " << this->energyConsumptionRx << " \n";
-
-
-//    cancelAndDelete(radioRXTimer);
-//    cancelAndDelete(timer_listeningWindowStart1);
-//    cancelAndDelete(timer_listeningWindowStop1);
-//    cancelAndDelete(timer_listeningWindowStart2);
-//    cancelAndDelete(timer_listeningWindowStop2);
+    recordScalar("Energy consumption total Tx", this->energyConsumptionTx);
+    recordScalar("Energy consumption total Rx", this->energyConsumptionRx);
+    recordScalar("Energy consumption total Idle", this->energyConsumptionIdle);
+    recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
 }
-//
-//
-//    def returnSpreadingFactor(self, SINR, minSINR):
-//        if SINR is None or SINR < minSINR:
-//            return None, None
-//        sf = 12
-//        w = 1.0
-//        for i in range(5):
-//            if SINR >= minSINR + i * 3 + 3:
-//                sf -= 1
-//                w /= 2.0
-//            else:
-//                break
-//        return sf, w
-//
-//
-//    def setSpreadingFactor(self):
-//        for n in range(len(self.ue)):
-//            for m in range(len(self.ue)):
-//                if n != m:
-//                    value = 7
-//                    if self.attenuationTable[n][m] > 20:
-//                        value = 8
-//                    elif self.attenuationTable[n][m] > 10:
-//                        value = 9
-//                    self.SFtable[n][m] = value
-//                    self.SFtable[m][n] = value
 
 }
 ;

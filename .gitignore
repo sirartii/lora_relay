@@ -2,3 +2,4 @@ out/*
 simulations/results/*
 src/opp-lora-relay-official*
 opp-lora-relay-official*
+/.metadata/

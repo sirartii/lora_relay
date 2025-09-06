@@ -25,17 +25,20 @@ namespace opp_lora_relay_official {
 /**
  * TODO - Generated class
  */
-class LogicRelay : public cSimpleModule
+class LogicRelay : public cSimpleModule, public cListener
 {
 
   protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
-
+    //virtual void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
+    //virtual void receiveSignal(cComponent *src, simsignal_t id, intval_t value, cObject *details) override;
+    //virtual void receiveSignal(cComponent *src, simsignal_t id, bool value, cObject *details) override;
+    virtual void receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details) override;
   private:
-      int dayTime; //minutes
-      int endNodeID;
-      //cGate baseNode;
+    simtime_t lastPacketReceive;
+    simsignal_t wakeupRelay;
+    float RXR_delay;
 
 };
 

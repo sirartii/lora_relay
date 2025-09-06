@@ -18,14 +18,16 @@
 
 #include <omnetpp.h>
 #include "Keeper.h"
+#include "LogicEndnode.h"
 #include <math.h>       /* log10 */
 #include <list>
 #include "common.h"
+#include "LoRaPacket.h"
 using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
-char *RadioActivityTypes[] = { "UNKNOWN", "RADIOOFF", "LISTENING", "RECEIVING", "TRANSMITTING", "TIMER" };
+//char *RadioActivityTypes[] = { "UNKNOWN", "RADIOOFF", "LISTENING", "RECEIVING", "TRANSMITTING", "TIMER" };
 //char *RadioMessageTypes[] = { "JOIN_REQUEST", "RELAY_JOIN_REQUEST", "DATA_FRAME"}
 
 enum RadioFrameType {
@@ -34,38 +36,52 @@ enum RadioFrameType {
     DATA_FRAME = 2,
 };
 
-class Radio : public cSimpleModule
+class Radio : public cSimpleModule, public cListener
 {
+public:
+    bool isListening();
+    bool isOffOrUnknown() const noexcept;
 
 protected:
-    virtual void initialize();
-    virtual void handleMessage(cMessage *msg);
-    virtual void finish();
-    bool isReceivedCorrectly(cMessage *msg);
-    double getRssi(cMessage *msg);
+    virtual void initialize() override;
+    virtual void handleMessage(cMessage *msg) override;
+    virtual void receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details) override;
+    virtual void finish() override;
+    using omnetpp::cListener::finish;       //in order not to override finish from cListener
+
+    bool isReceivedCorrectly(cMessage *msg, double rssi);
+    double getRssi(LoRaPacket *msg);
     double calculateReceivedPower(float pSend, double distance);
     void updateRadio();
     void setRadioStatus(cMessage *msg);
     void updateDaytime();
-    void sendToNetwork(cMessage *msg);
-    void receiveFromNetwork(cMessage *msg);
-    void directSendWithDelete(cMessage *msg);
+    void sendToNetwork(LoRaPacket *msg);
+    void receiveFromNetwork(LoRaPacket *msg);
+    void directSendWithDelete(LoRaPacket *msg);
 
 //    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
     double transmissionTimeInSec(int msgSize, int sf);
+    void updateRadioActivity(RadioActivity::ra newRA);
+    void dropByCollision(LoRaPacket* lp);
 
     double rssiOfCurrentReceive;
-    DevType::dt deviceType;
-    RadioActivity::ra radioStatus;
+    DevType deviceType;
+    RadioActivity::ra radioActivity;
+    RetransmissionModel retransmissionModel;
+
     Keeper *keeper;
+    int myKeeperIndex;
+
     Coords position;
     double txPower;
     double sensitivity;
     int dayTime;
     simtime_t busyUntil;
     std::string tmp_name;
-    std::list<cMessage> sendQueue;
+    std::list<LoRaPacket> sendQueue;
     bool listeningWindowRXRactive;
+    bool disableLAT;
+    int collisionCount;
 
 //    cMessage *radioRX1Timer;
 //    cMessage *radioRX2Timer;
@@ -75,23 +91,36 @@ protected:
     cMessage *timer_listeningWindowStart2;
     cMessage *timer_listeningWindowStop2;
 
+    LoRaPacket *currentRcvMessage;
+
     int listeningWindowStart1;
     int listeningWindowStart2;
     int listeningWindowDuration1;
     int listeningWindowDuration2;
+
     double listeningWindowRX1;
     double listeningWindowRX2;
     double listeningWindowRXR;
     double listeningWindowRXC;
     double listeningWindowRXCR;
-    cOutVector radioStatusVector;
-    cOutVector energyConsumptionVector;
+
+    //cOutVector radioStatusVector;
+    //cOutVector energyConsumptionVector;
 
     double currentConsumptionRx;
     double currentConsumptionTx;
+    double currentConsumptionIdle;
+    double currentConsumptionWOR;
+
     double energyConsumptionRx;
     double energyConsumptionTx;
     double energyConsumptionIdle;
+    double energyConsumptionWOR;
+
+    simsignal_t wakeupRelay;
+    simtime_t lastRadioActivityChange;
+    cMessage *radioUpdateReceive;
+
 };
 
 }

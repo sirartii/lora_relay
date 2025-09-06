@@ -22,9 +22,6 @@ using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
-/**
- * TODO - Generated class
- */
 class LogicGateway : public cSimpleModule
 {
   protected:

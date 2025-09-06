@@ -3,15 +3,15 @@
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
+//
 
 package opp_lora_relay_official;
 
@@ -22,8 +22,12 @@ simple Radio
 {
     parameters:
         @display("i=block/source");
-        double txPower = default(20);
-        double sensitivity = default(-115);
+        double txPower = default(14);
+        //double sensitivity = default(sensitivityAllRadios);
+        double attenuation = uniform(0,20);
+        double pathlosStd;
+        double sensitivityAllRadios;
+
         int listeningWindowStart1;
         int listeningWindowStart2;
         int listeningWindowDuration1;
@@ -33,12 +37,19 @@ simple Radio
         double listeningWindowRXR; //listening relay window duration in seconds
         double listeningWindowRXC; //time between transmission and RX1, and beetween RX1 and RX2, in seconds
         double listeningWindowRXCR; //time beetween RX2 and RXR, in seconds
-        
-        double currentConsumptionRx; //current consumption in RX mode [mA]
-        double currentConsumptionTx; //current consumption in TX mode [mA]
-        
-        double energyConsumption = default(0);
 
+        double currentConsumptionRx;   //current consumption in RX mode [mA]
+        double currentConsumptionTx;   //current consumption in TX mode [mA]
+		double currentConsumptionIdle; //current consumption in Idle mode [mA]
+		double currentConsumptionWOR;
+		
+
+        double energyConsumption = default(0);
+        double clockDriftMax;
+
+        int retransmissionModel;
+		@signal[wakeupRelay](type=double);
+		
     gates:
         //        output radioOut;
         input radioIn;

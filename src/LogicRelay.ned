@@ -20,6 +20,13 @@ package opp_lora_relay_official;
 //
 simple LogicRelay
 {
+    parameters:
+        double listeningWindowRX1;
+        double listeningWindowRX2;
+        double listeningWindowRXR;
+        double listeningWindowRXC;
+        double listeningWindowRXCR;
+        @signal[wakeupRelay](type=double);
     gates:
         output logicOut;
         input logicIn;

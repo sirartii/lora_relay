@@ -18,6 +18,7 @@
 
 #include <omnetpp.h>
 #include "common.h"
+#include "Keeper.h"
 
 using namespace omnetpp;
 
@@ -28,6 +29,7 @@ class LogicEndnode : public cSimpleModule
 public:
     LogicEndnode();
     virtual ~LogicEndnode();
+    int myKeeperIndex;
 
 private:
     int dayTime; //minutes
@@ -37,11 +39,41 @@ private:
     int transmittingWindowDuration2;
     cMessage *timerMessageWindow1;
     cMessage *timerMessageWindow2;
+
+    int windowsPerDay;                 // 1 lub 2
+    int framesPerWindowMin;            // min. ramek w oknie (>=1)
+    int framesPerWindowMax;            // max. ramek w oknie (>=min)
+    int framesRemainingWin1;           // ile pozostało do wysłania w bieżącym oknie #1
+    int framesRemainingWin2;           // analogicznie dla okna #2
+
     EndDeviceState endDeviceState;
+    int MsgAfterWOR;
+    int packetCounter;
+
+
+    //unsigned char packetCounter;
+    unsigned char lastACK;
+    unsigned char waitingResponse;
+    int missedResponse;
+    Keeper *keeper;
+
+    RetransmissionModel retransmissionModel;
+    double RTCdrift;
+    simtime_t lastACKTime;
+    simtime_t lastOnline;
+
+    double offlineMax;
+    double offlineTotal;
+
+    simsignal_t wakeupRelay;
 
 protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
+    virtual void handleParameterChange(const char * parname ) override;
+    virtual void finish() override;
+
+    void recordOnline();
     void updateDaytime();
     void updateLogicalState(EndDeviceState newState);
 };

@@ -22,13 +22,12 @@ import opp_lora_relay_official.Distortion;
 module Gateway
 {
     parameters:
-        double xpos;
-        double ypos;
         @display("p=$xpos,$ypos;i=device/antennatower");
     gates:
         input radioIn @directIn;
         inout json;
-    //	  output radioOut;
+     	//output radioOut @dire;
+     	
     submodules:
         radio: Radio {
             @display("p=342,203");

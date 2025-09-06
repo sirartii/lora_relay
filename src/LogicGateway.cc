@@ -14,25 +14,38 @@
 // 
 
 #include "LogicGateway.h"
+#include "LoRaPacket.h"
+
+using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
 Define_Module(LogicGateway);
 
 void LogicGateway::initialize() {
-    // TODO - Generated method body
+
+    //getAncestorPar("xpos").setDoubleValue(posX);
+    //getAncestorPar("ypos").setDoubleValue(posY);
+
 }
 
 void LogicGateway::handleMessage(cMessage *msg) {
     if (msg->isSelfMessage()) {
 
     } else {
+
+        LoRaPacket *LoRaMsg = dynamic_cast<LoRaPacket *>(msg);
         if (msg->arrivedOn("logicIn")) {
-            send(msg->dup(),"json$o");
+            if (LoRaMsg != nullptr )
+            {
+                EV << simTime() << " LNS Gateway got correct loRa Wan packet!";
+            }
+            if (LoRaMsg->autodetectUplink())
+                send(((LoRaPacket*)msg)->dupLoRa(),"json$o");               //Not fully understand why need to be duplicate but otherwise getting runtime error
         }
         if (msg->arrivedOn("json$i"))
         {
-            send(msg->dup(),"logicOut");
+            send(((LoRaPacket*)msg)->dupLoRa(),"logicOut");             //Not fully understand why need to be duplicate but otherwise getting runtime error
         }
     }
 }
