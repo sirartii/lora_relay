@@ -18,6 +18,7 @@
 #include <ctime>
 #include <chrono>
 #include <iomanip>
+#include <cstdlib>
 
 namespace opp_lora_relay_official {
 
@@ -35,7 +36,14 @@ void Keeper::reportDownlinkCollision(long devIdx, long pktId)
 
 void Keeper::recordDownlinkReception(long devIdx, long pktId)
 {
-    dlDelivered_.insert(makeKey(devIdx, pktId));
+    const uint64_t key = makeKey(devIdx, pktId);
+    if (dlDelivered_.insert(key).second) {
+        auto it = ulDeliveredDay_.find(key);
+        if (it != ulDeliveredDay_.end()) {
+            // Dzień liczymy wg UL
+            dailyReadDeviceDayE2E_.insert(makeDevDayKey(devIdx, it->second));
+        }
+    }
 }
 
 void Keeper::initialize()
@@ -255,21 +263,44 @@ void Keeper::handleMessage(cMessage *msg)
     }
 }
 
-void Keeper::recordMessageTransmission(int NodeFrom, int PacketId)
+void Keeper::recordMessageTransmission(int NodeFrom, int PacketId, bool isUplink)
 {
-    radioDevices[NodeFrom].LastPacketTransmissionTime = simTime();
-    radioDevices[NodeFrom].lastPacketId = PacketId;
+    if (isUplink)
+    {
+        radioDevices[NodeFrom].LastPacketTransmissionTime = simTime();
+        radioDevices[NodeFrom].lastPacketId = PacketId;
+    }
+
     totalPacketsTransmitted++;
+    if (isUplink)
+        totalPacketsTransmittedUL++;
+    else
+        totalPacketsTransmittedDL++;
 }
 
 void Keeper::recordMessageReception(long devIdx, long pktId)
 {
     // Zliczamy czas doręczenia UL tylko raz dla (devIdx,pktId)
-    const long long key = makeKey(devIdx, pktId);
-    if (ulDelivered_.insert(key).second) {
-       double deliveryTime = (simTime() - radioDevices[devIdx].LastPacketTransmissionTime).dbl();
-       totalPacketTime += deliveryTime;
-       // Nie zwiększamy tutaj totalPacketsDelivered – policzymy go jako UL∩DL w recordResultsToFile/finish
+    const uint64_t key = makeKey(devIdx, pktId);
+
+    if (ulDelivered_.insert(key).second)
+    {
+        const int d = dayIndex(simTime());
+        ulDeliveredDay_[key] = d;
+
+        // --- NOWE: zalicz sukces dnia na bazie UL ---
+        dailyReadDeviceDayUL_.insert(makeDevDayKey(devIdx, d));
+
+        // Jeśli DL dla tego pakietu już był -> zalicz też E2E
+        if (dlDelivered_.find(key) != dlDelivered_.end())
+            dailyReadDeviceDayE2E_.insert(makeDevDayKey(devIdx, d));
+    }
+    // if DL already delivered, mark device-day as successful
+    if (dlDelivered_.find(key) != dlDelivered_.end()) {
+        auto it = ulDeliveredDay_.find(key);
+        if (it != ulDeliveredDay_.end()) {
+            dailyDeviceDaySuccess_.insert(makeDevDayKey(devIdx, it->second));
+        }
     }
 }
 
@@ -314,43 +345,86 @@ void Keeper::recordResultsToFile()
         deliveredEndToEnd = std::max(deliveredUL, deliveredDL);
     }
 
+    // Daily read success
+    int endnodes = countEndnodes();
+    int simDays  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
+    long long totalDeviceDays      = 1LL * endnodes * simDays;
+
+    const long long successfulUL = (long long)dailyReadDeviceDayUL_.size();
+    const double dailyUL = (totalDeviceDays > 0)
+        ? 100.0 * (double)successfulUL / (double)totalDeviceDays : 0.0;
+
+    const long long successfulE2E = (long long)dailyReadDeviceDayE2E_.size();
+    const double dailyE2E = (totalDeviceDays > 0)
+        ? 100.0 * (double)successfulE2E / (double)totalDeviceDays : 0.0;
+
     // Keep legacy field in sync so downstream code / scalars remain valid
     totalPacketsDelivered = static_cast<int>(deliveredEndToEnd);
+
+    totalPacketsTransmitted = totalPacketsTransmittedUL + totalPacketsTransmittedDL;
 
 
     if (outFile.is_open()) {
         outFile << std::fixed << std::setprecision(2);
         outFile << std::ctime(&now);  // np. "Thu Jul 25 15:31:01 2025\n"
-        outFile << "=== Simulation Parames ====\n";
-        outFile << "ED = " << par("numEndnodes").str() << "\n";
-        outFile << "Model = " << par("retransmissionModel").str() << "\n";
-        outFile << "Distortion = " << par("enableKeeperDistortion").str() << "\n";
-        outFile << "Max miss " << par("missedPacketsToSearchRelay").str() << "\n";
+        outFile <<  "\n\n";
+        outFile << "============== Simulation Parames ================\n";
+        outFile << "ED             = " << endnodes << "\n";
+        outFile << "Scenario       = " << getSimulation()->getSystemModule()->getModuleType()->getName() << "\n";
+        outFile << "Model          = " << par("retransmissionModel").str() << "\n";
+        outFile << "Distortion     = " << par("enableKeeperDistortion").str() << "\n";
+        outFile << "Max miss       = " << par("missedPacketsToSearchRelay").str() << "\n";
+        outFile << "Simulated days = " << simDays << "\n";
+        outFile <<  "\n";
 
-        outFile << "=== Results ===\n";
+        outFile << "============== Results ================\n";
         outFile << "Total utilisation = " << 100*totalDuration / simTime() << "[%]\n";
-        outFile << "Total packets transmitted = " << totalPacketsTransmitted << "\n";
-        //outFile << "Total packets transmitted = " << packteSent << "\n";
-        //outFile << "Total packets transmitted = " << globalStats.noPackets << "\n";
-        outFile << "Total packets delivered = " << totalPacketsDelivered << "\n";
-        outFile << "Delivered UL = " << deliveredUL << "\n";
-        outFile << "Delivered DL = " << deliveredDL << "\n";
+        outFile <<  "\n";
+        //outFile << "Daily read base: endnodes=" << endnodes << " days=" << simDays << " totalDeviceDays=" << totalDeviceDays << "\n";
+
+        outFile << "Packets transmitted UL = " << totalPacketsTransmittedUL << "\n";
+        outFile << "Packets transmitted DL = " << totalPacketsTransmittedDL << "\n";
+        outFile << "Packets transmitted = " << totalPacketsTransmitted << "\n";
+        outFile <<  "\n";
+
+        outFile << "Packets delivered UL = " << deliveredUL << "\n";
+        outFile << "Packets delivered DL = " << deliveredDL << "\n";
+        outFile << "Packets delivered = " << deliveredUL+deliveredDL << "\n";
+        //outFile << "Packets delivered* = " << totalPacketsDelivered << "\n";
+        outFile <<  "\n";
+
+        outFile << "Packets delivered UL ef = " << (totalPacketsTransmittedUL > 0 ? 100.0 * (double)deliveredUL / (double)totalPacketsTransmittedUL : 0.0) << "[%]\n";
+        outFile << "Packets delivered DL ef = " << (totalPacketsTransmittedDL > 0 ? 100.0 * (double)deliveredDL / (double)totalPacketsTransmittedDL : 0.0) << "[%]\n";
+        outFile << "Average packet delivery time = " << (totalPacketsDelivered > 0 ? totalPacketTime / (double)totalPacketsDelivered : 0.0) << "\n";
+        outFile <<  "\n";
+
         //outFile << "Total packets delivered = " << globalStats.noPacketsDelivered << "\n";
+        //outFile << "Daily read success = " << dailyReadSuccess << "[%]\n";
+        //outFile << "Daily device-days successful = " << successfulDeviceDays << " / " << totalDeviceDays << "\n";
+
+        //outFile << "Daily read success (E2E UL+DL) = " << dailyE2E << "[%]\n";
+        //outFile << "Daily device-days successful (E2E) = "
+        //        << successfulE2E << " / " << totalDeviceDays << "\n";
+
+        outFile << "Days device-days total (UL) = " << totalDeviceDays << "\n";
+        outFile << "Days device-days successful (UL) = " << successfulUL << "\n";
+        outFile << "Daily read success (UL) = " << dailyUL << "[%]\n";
+        outFile <<  "\n";
 
         outFile << "Collisions uplink = " << noCollisionsUL << "\n";
         outFile << "Colissions downlink = " << noCollisionsDL << "\n";
         outFile << "Total collisions = " << noCollisionsSum /*globalStats.noCollisions*/ << "\n";
+        outFile <<  "\n";
 
-                outFile << "Packet delivery efficiency = " << (totalPacketsTransmitted > 0 ? 100.0 * (double)totalPacketsDelivered / (double)totalPacketsTransmitted : 0.0) << "[%]";
-                outFile << "Average packet delivery time = " << (totalPacketsDelivered > 0 ? totalPacketTime / (double)totalPacketsDelivered : 0.0) << "";
 
-        outFile << "Devices online max = " << endnodeStatusVector.getMax() << "\n";
-        outFile << "Devices online avg = " << endnodeStatusVector.getMean() << "\n";
-        outFile << "Devices online min = " << endnodeStatusVector.getMin() << "\n";
+        //outFile << "Devices online max = " << endnodeStatusVector.getMax() << "\n";
+        //outFile << "Devices online avg = " << endnodeStatusVector.getMean() << "\n";
+        //outFile << "Devices online min = " << endnodeStatusVector.getMin() << "\n";
 
-        outFile << "Devices offline count = " << offlineTime.getCount() << "\n";
+        outFile << "Devices re-join count = " << offlineTime.getCount() << "\n";
         outFile << "Devices offline longest = " << offlineTime.getMax() << "[s]\n";
         outFile << "Devices offline avg = " << offlineTime.getMean() << "[s]\n";
+        outFile <<  "\n";
 
         outFile << "Endnode consumption max = " << energyConsumption.getMax()/3600 << "[mAh]\n";
         outFile << "Endnode consumption avg = " << energyConsumption.getMean()/3600 << "[mAh]\n";
@@ -362,6 +436,53 @@ void Keeper::recordResultsToFile()
         outFile.close();
     } else {
         EV << "Unable to open results.txt for writing.\n";
+    }
+
+
+    std::ofstream topoFile("exec_results_topology.txt", std::ios::app);
+    if (topoFile.is_open()) {
+        topoFile << std::fixed << std::setprecision(2);
+        topoFile << std::ctime(&now);
+        topoFile << "\n";
+
+        const int endnodes_local = countEndnodes();
+        const int simDays_local  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
+
+        topoFile << "ED             = " << endnodes_local << "\n";
+        topoFile << "Simulated days = " << simDays_local  << "\n";
+        topoFile << "idx,x,y,avg_daily_success_UL[%]\n";
+
+        for (size_t i = 0; i < radioDevices.size(); ++i) {
+            if (radioDevices[i].devType != DevType::ENDNODE)
+                continue;
+
+            const int devIdx = static_cast<int>(i);
+
+            int successDaysUL = 0;
+            for (int d = 0; d < simDays_local; ++d) {
+                const uint64_t key = makeDevDayKey(devIdx, d);
+                if (dailyReadDeviceDayUL_.find(key) != dailyReadDeviceDayUL_.end())
+                    ++successDaysUL;
+            }
+            const double avgUL = (simDays_local > 0)
+                ? 100.0 * (double)successDaysUL / (double)simDays_local : 0.0;
+
+            double x = 0.0, y = 0.0;
+            if (radioDevices[i].radio) {
+                cModule* nodeMod = ((cModule*)(radioDevices[i].radio))->getParentModule(); // Endnode
+                const char* xs = nodeMod->getDisplayString().getTagArg("p", 0);
+                const char* ys = nodeMod->getDisplayString().getTagArg("p", 1);
+
+                if (nodeMod->hasPar("xpos")) x = nodeMod->par("xpos").doubleValue();
+                else                         x = (xs && *xs) ? atof(xs) : 0.0;
+
+                if (nodeMod->hasPar("ypos")) y = nodeMod->par("ypos").doubleValue();
+                else                         y = (ys && *ys) ? atof(ys) : 0.0;
+            }
+            // zapisujemy indeks ED (Node.index), współrzędne i średnie UL
+            topoFile << radioDevices[i].index << "," << x << "," << y << "," << avgUL << "\n";
+        }
+        topoFile << "\n\n";
     }
 }
 
@@ -394,11 +515,27 @@ void Keeper::finish()
     }
     totalPacketsDelivered = static_cast<int>(deliveredEndToEnd);
 
+    // Also export scalars for plotting
+    int endnodes = countEndnodes();
+    int simDays  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
+    long long totalDeviceDays      = 1LL * endnodes * simDays;
+    long long successfulDeviceDays = (long long)dailyDeviceDaySuccess_.size();
+    double dailyReadSuccess = (totalDeviceDays > 0)
+                              ? (100.0 * (double)successfulDeviceDays / (double)totalDeviceDays)
+                              : 0.0;
+
     recordScalar("Total utilisation", totalDuration / simTime());
     recordScalar("Average packet time", (totalPacketsDelivered > 0 ? totalPacketTime / totalPacketsDelivered : 0.0));
     recordScalar("Total packets delivered", totalPacketsDelivered);
 
     recordResultsToFile();
+}
+
+int Keeper::countEndnodes() const {
+    int n = 0;
+    for (const auto& nd : radioDevices)
+        if (nd.devType == DevType::ENDNODE) ++n;
+    return n;
 }
 
 

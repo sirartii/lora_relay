@@ -1,0 +1,1152 @@
+Sun Aug 31 10:17:25 2025
+=== Simulation Parames ====
+ED = 10
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 7.30[%]
+Total packets transmitted = 1600
+Total packets delivered = 1254
+Total collisions = 1109
+Packet delivery efficiency = 78.38[%]
+Average packet delivery time = 3.28
+Devices online max = 100.00
+Devices online avg = 96.62
+Devices online min = 90.00
+Devices offline count = 22
+Devices offline longest = 5405.32[s]
+Devices offline avg = 1621.61[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.03[mAh]
+Endnode consumption max = 5.72[mAh]
+Endnode consumption Relay = 20.76[mAh]
+--------------------------
+Sun Aug 31 10:17:27 2025
+=== Simulation Parames ====
+ED = 10
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 14.76[%]
+Total packets transmitted = 3983
+Total packets delivered = 2446
+Total collisions = 2065
+Packet delivery efficiency = 61.41[%]
+Average packet delivery time = 2.88
+Devices online max = 100.00
+Devices online avg = 96.04
+Devices online min = 60.00
+Devices offline count = 47
+Devices offline longest = 2996.63[s]
+Devices offline avg = 800.63[s]
+Endnode consumption max = 15.63[mAh]
+Endnode consumption avg = 12.74[mAh]
+Endnode consumption max = 11.23[mAh]
+Endnode consumption Relay = 40.33[mAh]
+--------------------------
+Sun Aug 31 10:17:27 2025
+=== Simulation Parames ====
+ED = 10
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 15.59[%]
+Total packets transmitted = 4253
+Total packets delivered = 2650
+Total collisions = 2274
+Packet delivery efficiency = 62.31[%]
+Average packet delivery time = 2.80
+Devices online max = 100.00
+Devices online avg = 95.32
+Devices online min = 70.00
+Devices offline count = 42
+Devices offline longest = 3724.63[s]
+Devices offline avg = 1083.39[s]
+Endnode consumption max = 15.07[mAh]
+Endnode consumption avg = 13.07[mAh]
+Endnode consumption max = 11.59[mAh]
+Endnode consumption Relay = 51.71[mAh]
+--------------------------
+Sun Aug 31 10:17:27 2025
+=== Simulation Parames ====
+ED = 10
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 16.02[%]
+Total packets transmitted = 4297
+Total packets delivered = 2722
+Total collisions = 2421
+Packet delivery efficiency = 63.35[%]
+Average packet delivery time = 2.85
+Devices online max = 100.00
+Devices online avg = 96.98
+Devices online min = 80.00
+Devices offline count = 38
+Devices offline longest = 3569.02[s]
+Devices offline avg = 890.13[s]
+Endnode consumption max = 15.84[mAh]
+Endnode consumption avg = 13.21[mAh]
+Endnode consumption max = 11.42[mAh]
+Endnode consumption Relay = 53.32[mAh]
+--------------------------
+Sun Aug 31 10:17:28 2025
+=== Simulation Parames ====
+ED = 10
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 6.90[%]
+Total packets transmitted = 1600
+Total packets delivered = 1370
+Total collisions = 750
+Packet delivery efficiency = 85.62[%]
+Average packet delivery time = 3.20
+Devices online max = 100.00
+Devices online avg = 99.50
+Devices online min = 90.00
+Devices offline count = 15
+Devices offline longest = 4167.94[s]
+Devices offline avg = 809.83[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.07[mAh]
+Endnode consumption max = 6.01[mAh]
+Endnode consumption Relay = 14.06[mAh]
+--------------------------
+Sun Aug 31 10:17:30 2025
+=== Simulation Parames ====
+ED = 10
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 7.31[%]
+Total packets transmitted = 1600
+Total packets delivered = 1389
+Total collisions = 891
+Packet delivery efficiency = 86.81[%]
+Average packet delivery time = 3.29
+Devices online max = 100.00
+Devices online avg = 99.42
+Devices online min = 90.00
+Devices offline count = 15
+Devices offline longest = 2361.96[s]
+Devices offline avg = 910.40[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.07[mAh]
+Endnode consumption max = 6.01[mAh]
+Endnode consumption Relay = 19.89[mAh]
+--------------------------
+Sun Aug 31 10:17:33 2025
+=== Simulation Parames ====
+ED = 12
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 17.30[%]
+Total packets transmitted = 4741
+Total packets delivered = 3034
+Total collisions = 2266
+Packet delivery efficiency = 63.99[%]
+Average packet delivery time = 2.83
+Devices online max = 100.00
+Devices online avg = 96.21
+Devices online min = 83.00
+Devices offline count = 39
+Devices offline longest = 6517.63[s]
+Devices offline avg = 1094.19[s]
+Endnode consumption max = 16.97[mAh]
+Endnode consumption avg = 12.77[mAh]
+Endnode consumption max = 11.39[mAh]
+Endnode consumption Relay = 42.39[mAh]
+--------------------------
+Sun Aug 31 10:17:33 2025
+=== Simulation Parames ====
+ED = 12
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 18.69[%]
+Total packets transmitted = 5133
+Total packets delivered = 3233
+Total collisions = 2865
+Packet delivery efficiency = 62.98[%]
+Average packet delivery time = 2.73
+Devices online max = 100.00
+Devices online avg = 95.06
+Devices online min = 83.00
+Devices offline count = 58
+Devices offline longest = 3659.63[s]
+Devices offline avg = 908.41[s]
+Endnode consumption max = 15.58[mAh]
+Endnode consumption avg = 13.26[mAh]
+Endnode consumption max = 11.63[mAh]
+Endnode consumption Relay = 56.24[mAh]
+--------------------------
+Sun Aug 31 10:17:33 2025
+=== Simulation Parames ====
+ED = 12
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 8.68[%]
+Total packets transmitted = 1920
+Total packets delivered = 1574
+Total collisions = 1354
+Packet delivery efficiency = 81.98[%]
+Average packet delivery time = 3.07
+Devices online max = 100.00
+Devices online avg = 96.09
+Devices online min = 83.00
+Devices offline count = 28
+Devices offline longest = 9190.78[s]
+Devices offline avg = 1625.07[s]
+Endnode consumption max = 6.13[mAh]
+Endnode consumption avg = 6.00[mAh]
+Endnode consumption max = 5.36[mAh]
+Endnode consumption Relay = 24.25[mAh]
+--------------------------
+Sun Aug 31 10:17:33 2025
+=== Simulation Parames ====
+ED = 12
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 17.45[%]
+Total packets transmitted = 4793
+Total packets delivered = 3064
+Total collisions = 2361
+Packet delivery efficiency = 63.93[%]
+Average packet delivery time = 2.82
+Devices online max = 100.00
+Devices online avg = 96.23
+Devices online min = 75.00
+Devices offline count = 43
+Devices offline longest = 3593.52[s]
+Devices offline avg = 1076.92[s]
+Endnode consumption max = 15.47[mAh]
+Endnode consumption avg = 12.81[mAh]
+Endnode consumption max = 11.62[mAh]
+Endnode consumption Relay = 44.35[mAh]
+--------------------------
+Sun Aug 31 10:17:36 2025
+=== Simulation Parames ====
+ED = 12
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 8.55[%]
+Total packets transmitted = 1920
+Total packets delivered = 1624
+Total collisions = 1220
+Packet delivery efficiency = 84.58[%]
+Average packet delivery time = 3.15
+Devices online max = 100.00
+Devices online avg = 93.44
+Devices online min = 83.00
+Devices offline count = 21
+Devices offline longest = 6855.20[s]
+Devices offline avg = 1340.41[s]
+Endnode consumption max = 6.06[mAh]
+Endnode consumption avg = 5.95[mAh]
+Endnode consumption max = 4.98[mAh]
+Endnode consumption Relay = 22.81[mAh]
+--------------------------
+Sun Aug 31 10:17:37 2025
+=== Simulation Parames ====
+ED = 12
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 8.38[%]
+Total packets transmitted = 1920
+Total packets delivered = 1584
+Total collisions = 1140
+Packet delivery efficiency = 82.50[%]
+Average packet delivery time = 3.18
+Devices online max = 100.00
+Devices online avg = 97.68
+Devices online min = 83.00
+Devices offline count = 28
+Devices offline longest = 3185.20[s]
+Devices offline avg = 1205.68[s]
+Endnode consumption max = 6.11[mAh]
+Endnode consumption avg = 6.04[mAh]
+Endnode consumption max = 5.86[mAh]
+Endnode consumption Relay = 20.46[mAh]
+--------------------------
+Sun Aug 31 10:17:39 2025
+=== Simulation Parames ====
+ED = 14
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 18.60[%]
+Total packets transmitted = 5184
+Total packets delivered = 3225
+Total collisions = 2302
+Packet delivery efficiency = 62.21[%]
+Average packet delivery time = 2.81
+Devices online max = 100.00
+Devices online avg = 95.76
+Devices online min = 78.00
+Devices offline count = 58
+Devices offline longest = 3689.63[s]
+Devices offline avg = 894.33[s]
+Endnode consumption max = 14.86[mAh]
+Endnode consumption avg = 12.33[mAh]
+Endnode consumption max = 11.21[mAh]
+Endnode consumption Relay = 33.62[mAh]
+--------------------------
+Sun Aug 31 10:17:40 2025
+=== Simulation Parames ====
+ED = 14
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 9.22[%]
+Total packets transmitted = 2240
+Total packets delivered = 1934
+Total collisions = 997
+Packet delivery efficiency = 86.34[%]
+Average packet delivery time = 3.09
+Devices online max = 100.00
+Devices online avg = 98.58
+Devices online min = 78.00
+Devices offline count = 23
+Devices offline longest = 4325.00[s]
+Devices offline avg = 1052.94[s]
+Endnode consumption max = 6.77[mAh]
+Endnode consumption avg = 6.09[mAh]
+Endnode consumption max = 5.89[mAh]
+Endnode consumption Relay = 14.87[mAh]
+--------------------------
+Sun Aug 31 10:17:40 2025
+=== Simulation Parames ====
+ED = 14
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 21.93[%]
+Total packets transmitted = 5952
+Total packets delivered = 3773
+Total collisions = 3564
+Packet delivery efficiency = 63.39[%]
+Average packet delivery time = 2.67
+Devices online max = 100.00
+Devices online avg = 96.29
+Devices online min = 85.00
+Devices offline count = 48
+Devices offline longest = 3585.63[s]
+Devices offline avg = 999.13[s]
+Endnode consumption max = 16.08[mAh]
+Endnode consumption avg = 13.25[mAh]
+Endnode consumption max = 11.80[mAh]
+Endnode consumption Relay = 65.61[mAh]
+--------------------------
+Sun Aug 31 10:17:42 2025
+=== Simulation Parames ====
+ED = 14
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 21.12[%]
+Total packets transmitted = 5733
+Total packets delivered = 3647
+Total collisions = 3292
+Packet delivery efficiency = 63.61[%]
+Average packet delivery time = 2.73
+Devices online max = 100.00
+Devices online avg = 96.24
+Devices online min = 85.00
+Devices offline count = 53
+Devices offline longest = 2538.63[s]
+Devices offline avg = 902.53[s]
+Endnode consumption max = 15.52[mAh]
+Endnode consumption avg = 12.91[mAh]
+Endnode consumption max = 11.47[mAh]
+Endnode consumption Relay = 60.33[mAh]
+--------------------------
+Sun Aug 31 10:17:43 2025
+=== Simulation Parames ====
+ED = 14
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 10.30[%]
+Total packets transmitted = 2240
+Total packets delivered = 1733
+Total collisions = 1695
+Packet delivery efficiency = 77.37[%]
+Average packet delivery time = 3.29
+Devices online max = 100.00
+Devices online avg = 97.12
+Devices online min = 85.00
+Devices offline count = 46
+Devices offline longest = 3571.71[s]
+Devices offline avg = 1002.08[s]
+Endnode consumption max = 6.32[mAh]
+Endnode consumption avg = 6.04[mAh]
+Endnode consumption max = 5.75[mAh]
+Endnode consumption Relay = 30.11[mAh]
+--------------------------
+Sun Aug 31 10:17:43 2025
+=== Simulation Parames ====
+ED = 14
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 9.46[%]
+Total packets transmitted = 2240
+Total packets delivered = 1969
+Total collisions = 1062
+Packet delivery efficiency = 87.90[%]
+Average packet delivery time = 3.11
+Devices online max = 100.00
+Devices online avg = 99.33
+Devices online min = 85.00
+Devices offline count = 20
+Devices offline longest = 2478.75[s]
+Devices offline avg = 901.95[s]
+Endnode consumption max = 6.13[mAh]
+Endnode consumption avg = 6.06[mAh]
+Endnode consumption max = 6.02[mAh]
+Endnode consumption Relay = 17.79[mAh]
+--------------------------
+Sun Aug 31 10:17:47 2025
+=== Simulation Parames ====
+ED = 16
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 11.68[%]
+Total packets transmitted = 2560
+Total packets delivered = 1774
+Total collisions = 2276
+Packet delivery efficiency = 69.30[%]
+Average packet delivery time = 3.21
+Devices online max = 100.00
+Devices online avg = 91.00
+Devices online min = 75.00
+Devices offline count = 56
+Devices offline longest = 12425.13[s]
+Devices offline avg = 1903.11[s]
+Endnode consumption max = 6.15[mAh]
+Endnode consumption avg = 5.92[mAh]
+Endnode consumption max = 5.09[mAh]
+Endnode consumption Relay = 36.16[mAh]
+--------------------------
+Sun Aug 31 10:17:48 2025
+=== Simulation Parames ====
+ED = 16
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 24.69[%]
+Total packets transmitted = 6751
+Total packets delivered = 4277
+Total collisions = 4052
+Packet delivery efficiency = 63.35[%]
+Average packet delivery time = 2.63
+Devices online max = 100.00
+Devices online avg = 96.11
+Devices online min = 75.00
+Devices offline count = 56
+Devices offline longest = 4200.30[s]
+Devices offline avg = 988.46[s]
+Endnode consumption max = 16.09[mAh]
+Endnode consumption avg = 13.04[mAh]
+Endnode consumption max = 11.38[mAh]
+Endnode consumption Relay = 73.49[mAh]
+--------------------------
+Sun Aug 31 10:17:49 2025
+=== Simulation Parames ====
+ED = 16
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 22.79[%]
+Total packets transmitted = 6284
+Total packets delivered = 3814
+Total collisions = 3387
+Packet delivery efficiency = 60.69[%]
+Average packet delivery time = 2.77
+Devices online max = 100.00
+Devices online avg = 95.61
+Devices online min = 81.00
+Devices offline count = 57
+Devices offline longest = 4669.63[s]
+Devices offline avg = 1142.67[s]
+Endnode consumption max = 15.80[mAh]
+Endnode consumption avg = 12.63[mAh]
+Endnode consumption max = 11.04[mAh]
+Endnode consumption Relay = 54.79[mAh]
+--------------------------
+Sun Aug 31 10:17:49 2025
+=== Simulation Parames ====
+ED = 16
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 24.04[%]
+Total packets transmitted = 6593
+Total packets delivered = 4045
+Total collisions = 3879
+Packet delivery efficiency = 61.35[%]
+Average packet delivery time = 2.66
+Devices online max = 100.00
+Devices online avg = 96.00
+Devices online min = 81.00
+Devices offline count = 69
+Devices offline longest = 4733.63[s]
+Devices offline avg = 862.32[s]
+Endnode consumption max = 16.44[mAh]
+Endnode consumption avg = 12.96[mAh]
+Endnode consumption max = 11.35[mAh]
+Endnode consumption Relay = 63.68[mAh]
+--------------------------
+Sun Aug 31 10:17:51 2025
+=== Simulation Parames ====
+ED = 16
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 10.90[%]
+Total packets transmitted = 2560
+Total packets delivered = 2250
+Total collisions = 1231
+Packet delivery efficiency = 87.89[%]
+Average packet delivery time = 3.07
+Devices online max = 100.00
+Devices online avg = 99.55
+Devices online min = 93.00
+Devices offline count = 21
+Devices offline longest = 2758.78[s]
+Devices offline avg = 741.30[s]
+Endnode consumption max = 6.15[mAh]
+Endnode consumption avg = 6.06[mAh]
+Endnode consumption max = 6.03[mAh]
+Endnode consumption Relay = 21.00[mAh]
+--------------------------
+Sun Aug 31 10:17:52 2025
+=== Simulation Parames ====
+ED = 16
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 10.97[%]
+Total packets transmitted = 2560
+Total packets delivered = 1582
+Total collisions = 2303
+Packet delivery efficiency = 61.80[%]
+Average packet delivery time = 3.10
+Devices online max = 100.00
+Devices online avg = 91.35
+Devices online min = 68.00
+Devices offline count = 62
+Devices offline longest = 9190.80[s]
+Devices offline avg = 2031.67[s]
+Endnode consumption max = 6.11[mAh]
+Endnode consumption avg = 5.90[mAh]
+Endnode consumption max = 5.65[mAh]
+Endnode consumption Relay = 27.85[mAh]
+--------------------------
+Sun Aug 31 10:17:56 2025
+=== Simulation Parames ====
+ED = 18
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 11.80[%]
+Total packets transmitted = 2880
+Total packets delivered = 2104
+Total collisions = 1953
+Packet delivery efficiency = 73.06[%]
+Average packet delivery time = 3.02
+Devices online max = 100.00
+Devices online avg = 91.10
+Devices online min = 77.00
+Devices offline count = 38
+Devices offline longest = 24844.57[s]
+Devices offline avg = 3151.70[s]
+Endnode consumption max = 6.06[mAh]
+Endnode consumption avg = 5.89[mAh]
+Endnode consumption max = 4.55[mAh]
+Endnode consumption Relay = 23.55[mAh]
+--------------------------
+Sun Aug 31 10:17:56 2025
+=== Simulation Parames ====
+ED = 18
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 25.06[%]
+Total packets transmitted = 6938
+Total packets delivered = 4256
+Total collisions = 3678
+Packet delivery efficiency = 61.34[%]
+Average packet delivery time = 2.73
+Devices online max = 100.00
+Devices online avg = 96.06
+Devices online min = 83.00
+Devices offline count = 67
+Devices offline longest = 3654.63[s]
+Devices offline avg = 944.70[s]
+Endnode consumption max = 15.35[mAh]
+Endnode consumption avg = 12.59[mAh]
+Endnode consumption max = 11.38[mAh]
+Endnode consumption Relay = 50.95[mAh]
+--------------------------
+Sun Aug 31 10:17:57 2025
+=== Simulation Parames ====
+ED = 18
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 26.02[%]
+Total packets transmitted = 7188
+Total packets delivered = 4364
+Total collisions = 4045
+Packet delivery efficiency = 60.71[%]
+Average packet delivery time = 2.66
+Devices online max = 100.00
+Devices online avg = 96.43
+Devices online min = 83.00
+Devices offline count = 78
+Devices offline longest = 2547.63[s]
+Devices offline avg = 797.45[s]
+Endnode consumption max = 15.93[mAh]
+Endnode consumption avg = 12.83[mAh]
+Endnode consumption max = 11.07[mAh]
+Endnode consumption Relay = 60.06[mAh]
+--------------------------
+Sun Aug 31 10:17:59 2025
+=== Simulation Parames ====
+ED = 18
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 27.18[%]
+Total packets transmitted = 7578
+Total packets delivered = 4583
+Total collisions = 4418
+Packet delivery efficiency = 60.48[%]
+Average packet delivery time = 2.62
+Devices online max = 100.00
+Devices online avg = 95.27
+Devices online min = 83.00
+Devices offline count = 77
+Devices offline longest = 5970.18[s]
+Devices offline avg = 995.70[s]
+Endnode consumption max = 16.34[mAh]
+Endnode consumption avg = 13.21[mAh]
+Endnode consumption max = 11.07[mAh]
+Endnode consumption Relay = 69.78[mAh]
+--------------------------
+Sun Aug 31 10:18:00 2025
+=== Simulation Parames ====
+ED = 18
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 12.56[%]
+Total packets transmitted = 2880
+Total packets delivered = 2463
+Total collisions = 1640
+Packet delivery efficiency = 85.52[%]
+Average packet delivery time = 3.13
+Devices online max = 100.00
+Devices online avg = 98.50
+Devices online min = 77.00
+Devices offline count = 42
+Devices offline longest = 3191.62[s]
+Devices offline avg = 782.35[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.05[mAh]
+Endnode consumption max = 5.94[mAh]
+Endnode consumption Relay = 27.75[mAh]
+--------------------------
+Sun Aug 31 10:18:01 2025
+=== Simulation Parames ====
+ED = 18
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 12.11[%]
+Total packets transmitted = 2880
+Total packets delivered = 2544
+Total collisions = 1316
+Packet delivery efficiency = 88.33[%]
+Average packet delivery time = 3.06
+Devices online max = 100.00
+Devices online avg = 99.65
+Devices online min = 94.00
+Devices offline count = 23
+Devices offline longest = 2391.95[s]
+Devices offline avg = 625.07[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.06[mAh]
+Endnode consumption max = 6.00[mAh]
+Endnode consumption Relay = 21.55[mAh]
+--------------------------
+Sun Aug 31 10:18:06 2025
+=== Simulation Parames ====
+ED = 20
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 14.03[%]
+Total packets transmitted = 3200
+Total packets delivered = 2682
+Total collisions = 1912
+Packet delivery efficiency = 83.81[%]
+Average packet delivery time = 3.13
+Devices online max = 100.00
+Devices online avg = 93.02
+Devices online min = 85.00
+Devices offline count = 39
+Devices offline longest = 10811.06[s]
+Devices offline avg = 1381.93[s]
+Endnode consumption max = 6.15[mAh]
+Endnode consumption avg = 5.93[mAh]
+Endnode consumption max = 3.99[mAh]
+Endnode consumption Relay = 36.05[mAh]
+--------------------------
+Sun Aug 31 10:18:07 2025
+=== Simulation Parames ====
+ED = 20
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 31.30[%]
+Total packets transmitted = 8798
+Total packets delivered = 4873
+Total collisions = 5812
+Packet delivery efficiency = 55.39[%]
+Average packet delivery time = 2.61
+Devices online max = 100.00
+Devices online avg = 94.06
+Devices online min = 80.00
+Devices offline count = 108
+Devices offline longest = 4437.63[s]
+Devices offline avg = 1003.72[s]
+Endnode consumption max = 16.57[mAh]
+Endnode consumption avg = 13.26[mAh]
+Endnode consumption max = 10.83[mAh]
+Endnode consumption Relay = 92.03[mAh]
+--------------------------
+Sun Aug 31 10:18:08 2025
+=== Simulation Parames ====
+ED = 20
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 29.02[%]
+Total packets transmitted = 8156
+Total packets delivered = 4612
+Total collisions = 4636
+Packet delivery efficiency = 56.55[%]
+Average packet delivery time = 2.74
+Devices online max = 100.00
+Devices online avg = 94.39
+Devices online min = 80.00
+Devices offline count = 97
+Devices offline longest = 4367.63[s]
+Devices offline avg = 1089.95[s]
+Endnode consumption max = 16.10[mAh]
+Endnode consumption avg = 12.83[mAh]
+Endnode consumption max = 11.25[mAh]
+Endnode consumption Relay = 69.12[mAh]
+--------------------------
+Sun Aug 31 10:18:09 2025
+=== Simulation Parames ====
+ED = 20
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 28.83[%]
+Total packets transmitted = 8167
+Total packets delivered = 4632
+Total collisions = 4456
+Packet delivery efficiency = 56.72[%]
+Average packet delivery time = 2.73
+Devices online max = 100.00
+Devices online avg = 94.06
+Devices online min = 85.00
+Devices offline count = 108
+Devices offline longest = 5131.63[s]
+Devices offline avg = 1017.17[s]
+Endnode consumption max = 15.96[mAh]
+Endnode consumption avg = 12.88[mAh]
+Endnode consumption max = 11.41[mAh]
+Endnode consumption Relay = 68.63[mAh]
+--------------------------
+Sun Aug 31 10:18:11 2025
+=== Simulation Parames ====
+ED = 20
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 13.78[%]
+Total packets transmitted = 3200
+Total packets delivered = 2475
+Total collisions = 2367
+Packet delivery efficiency = 77.34[%]
+Average packet delivery time = 3.02
+Devices online max = 100.00
+Devices online avg = 92.41
+Devices online min = 80.00
+Devices offline count = 55
+Devices offline longest = 15671.26[s]
+Devices offline avg = 2684.63[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 5.91[mAh]
+Endnode consumption max = 4.83[mAh]
+Endnode consumption Relay = 33.29[mAh]
+--------------------------
+Sun Aug 31 10:18:12 2025
+=== Simulation Parames ====
+ED = 20
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 14.41[%]
+Total packets transmitted = 3200
+Total packets delivered = 2300
+Total collisions = 2258
+Packet delivery efficiency = 71.88[%]
+Average packet delivery time = 3.36
+Devices online max = 100.00
+Devices online avg = 95.04
+Devices online min = 85.00
+Devices offline count = 29
+Devices offline longest = 16744.61[s]
+Devices offline avg = 1868.18[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 5.98[mAh]
+Endnode consumption max = 4.82[mAh]
+Endnode consumption Relay = 41.94[mAh]
+--------------------------
+Sun Aug 31 10:18:17 2025
+=== Simulation Parames ====
+ED = 22
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 15.52[%]
+Total packets transmitted = 3520
+Total packets delivered = 3043
+Total collisions = 2038
+Packet delivery efficiency = 86.45[%]
+Average packet delivery time = 3.21
+Devices online max = 100.00
+Devices online avg = 98.31
+Devices online min = 90.00
+Devices offline count = 45
+Devices offline longest = 3250.63[s]
+Devices offline avg = 1020.65[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.06[mAh]
+Endnode consumption max = 5.93[mAh]
+Endnode consumption Relay = 36.51[mAh]
+--------------------------
+Sun Aug 31 10:18:18 2025
+=== Simulation Parames ====
+ED = 22
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 32.59[%]
+Total packets transmitted = 9313
+Total packets delivered = 5083
+Total collisions = 5734
+Packet delivery efficiency = 54.58[%]
+Average packet delivery time = 2.61
+Devices online max = 100.00
+Devices online avg = 92.85
+Devices online min = 77.00
+Devices offline count = 121
+Devices offline longest = 7710.63[s]
+Devices offline avg = 1148.54[s]
+Endnode consumption max = 15.61[mAh]
+Endnode consumption avg = 13.02[mAh]
+Endnode consumption max = 11.35[mAh]
+Endnode consumption Relay = 82.21[mAh]
+--------------------------
+Sun Aug 31 10:18:19 2025
+=== Simulation Parames ====
+ED = 22
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 33.15[%]
+Total packets transmitted = 9440
+Total packets delivered = 5191
+Total collisions = 5918
+Packet delivery efficiency = 54.99[%]
+Average packet delivery time = 2.61
+Devices online max = 100.00
+Devices online avg = 93.45
+Devices online min = 81.00
+Devices offline count = 108
+Devices offline longest = 4918.63[s]
+Devices offline avg = 1158.67[s]
+Endnode consumption max = 15.97[mAh]
+Endnode consumption avg = 13.15[mAh]
+Endnode consumption max = 11.25[mAh]
+Endnode consumption Relay = 85.89[mAh]
+--------------------------
+Sun Aug 31 10:18:21 2025
+=== Simulation Parames ====
+ED = 22
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 31.56[%]
+Total packets transmitted = 8947
+Total packets delivered = 4881
+Total collisions = 5297
+Packet delivery efficiency = 54.55[%]
+Average packet delivery time = 2.69
+Devices online max = 100.00
+Devices online avg = 93.70
+Devices online min = 81.00
+Devices offline count = 116
+Devices offline longest = 3804.25[s]
+Devices offline avg = 1030.58[s]
+Endnode consumption max = 15.62[mAh]
+Endnode consumption avg = 12.78[mAh]
+Endnode consumption max = 11.36[mAh]
+Endnode consumption Relay = 74.26[mAh]
+--------------------------
+Sun Aug 31 10:18:23 2025
+=== Simulation Parames ====
+ED = 22
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 15.94[%]
+Total packets transmitted = 3520
+Total packets delivered = 2848
+Total collisions = 2732
+Packet delivery efficiency = 80.91[%]
+Average packet delivery time = 3.14
+Devices online max = 100.00
+Devices online avg = 92.84
+Devices online min = 81.00
+Devices offline count = 56
+Devices offline longest = 10265.04[s]
+Devices offline avg = 2434.94[s]
+Endnode consumption max = 6.17[mAh]
+Endnode consumption avg = 5.95[mAh]
+Endnode consumption max = 5.24[mAh]
+Endnode consumption Relay = 42.47[mAh]
+--------------------------
+Sun Aug 31 10:18:24 2025
+=== Simulation Parames ====
+ED = 22
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 15.30[%]
+Total packets transmitted = 3520
+Total packets delivered = 2395
+Total collisions = 3105
+Packet delivery efficiency = 68.04[%]
+Average packet delivery time = 3.03
+Devices online max = 100.00
+Devices online avg = 87.89
+Devices online min = 77.00
+Devices offline count = 89
+Devices offline longest = 23770.91[s]
+Devices offline avg = 2515.45[s]
+Endnode consumption max = 6.29[mAh]
+Endnode consumption avg = 5.86[mAh]
+Endnode consumption max = 4.58[mAh]
+Endnode consumption Relay = 40.02[mAh]
+--------------------------
+Sun Aug 31 10:18:29 2025
+=== Simulation Parames ====
+ED = 24
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 16.12[%]
+Total packets transmitted = 3840
+Total packets delivered = 3049
+Total collisions = 2351
+Packet delivery efficiency = 79.40[%]
+Average packet delivery time = 3.05
+Devices online max = 100.00
+Devices online avg = 94.63
+Devices online min = 87.00
+Devices offline count = 56
+Devices offline longest = 14050.85[s]
+Devices offline avg = 1866.94[s]
+Endnode consumption max = 6.43[mAh]
+Endnode consumption avg = 5.99[mAh]
+Endnode consumption max = 4.90[mAh]
+Endnode consumption Relay = 32.80[mAh]
+--------------------------
+Sun Aug 31 10:18:29 2025
+=== Simulation Parames ====
+ED = 24
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 32.94[%]
+Total packets transmitted = 9456
+Total packets delivered = 4968
+Total collisions = 5377
+Packet delivery efficiency = 52.54[%]
+Average packet delivery time = 2.68
+Devices online max = 100.00
+Devices online avg = 92.72
+Devices online min = 79.00
+Devices offline count = 139
+Devices offline longest = 6386.63[s]
+Devices offline avg = 1039.47[s]
+Endnode consumption max = 14.92[mAh]
+Endnode consumption avg = 12.61[mAh]
+Endnode consumption max = 11.15[mAh]
+Endnode consumption Relay = 63.55[mAh]
+--------------------------
+Sun Aug 31 10:18:32 2025
+=== Simulation Parames ====
+ED = 24
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 36.72[%]
+Total packets transmitted = 10568
+Total packets delivered = 5583
+Total collisions = 7113
+Packet delivery efficiency = 52.83[%]
+Average packet delivery time = 2.52
+Devices online max = 100.00
+Devices online avg = 92.03
+Devices online min = 83.00
+Devices offline count = 144
+Devices offline longest = 6387.63[s]
+Devices offline avg = 1074.25[s]
+Endnode consumption max = 16.54[mAh]
+Endnode consumption avg = 13.22[mAh]
+Endnode consumption max = 11.24[mAh]
+Endnode consumption Relay = 98.95[mAh]
+--------------------------
+Sun Aug 31 10:18:35 2025
+=== Simulation Parames ====
+ED = 24
+Model = 1
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 36.78[%]
+Total packets transmitted = 10488
+Total packets delivered = 5697
+Total collisions = 7112
+Packet delivery efficiency = 54.32[%]
+Average packet delivery time = 2.52
+Devices online max = 100.00
+Devices online avg = 92.79
+Devices online min = 79.00
+Devices offline count = 144
+Devices offline longest = 5418.63[s]
+Devices offline avg = 1015.87[s]
+Endnode consumption max = 15.85[mAh]
+Endnode consumption avg = 13.22[mAh]
+Endnode consumption max = 11.22[mAh]
+Endnode consumption Relay = 97.73[mAh]
+--------------------------
+Sun Aug 31 10:18:35 2025
+=== Simulation Parames ====
+ED = 24
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 17.21[%]
+Total packets transmitted = 3840
+Total packets delivered = 3402
+Total collisions = 2182
+Packet delivery efficiency = 88.59[%]
+Average packet delivery time = 3.21
+Devices online max = 100.00
+Devices online avg = 99.46
+Devices online min = 95.00
+Devices offline count = 29
+Devices offline longest = 4826.46[s]
+Devices offline avg = 878.28[s]
+Endnode consumption max = 6.66[mAh]
+Endnode consumption avg = 6.10[mAh]
+Endnode consumption max = 6.01[mAh]
+Endnode consumption Relay = 43.51[mAh]
+--------------------------
+Sun Aug 31 10:18:35 2025
+=== Simulation Parames ====
+ED = 24
+Model = 2
+Distortion = 1
+Max miss 3
+=== Results ===
+Total utilisation = 17.32[%]
+Total packets transmitted = 3840
+Total packets delivered = 3027
+Total collisions = 3054
+Packet delivery efficiency = 78.83[%]
+Average packet delivery time = 3.25
+Devices online max = 100.00
+Devices online avg = 96.31
+Devices online min = 83.00
+Devices offline count = 52
+Devices offline longest = 10101.84[s]
+Devices offline avg = 1818.63[s]
+Endnode consumption max = 6.16[mAh]
+Endnode consumption avg = 6.00[mAh]
+Endnode consumption max = 5.41[mAh]
+Endnode consumption Relay = 49.02[mAh]
+--------------------------

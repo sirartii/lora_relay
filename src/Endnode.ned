@@ -24,7 +24,7 @@ module Endnode
     parameters:
         double xpos = default(100);
         double ypos = default(100);
-        @display("p=$xpos,$ypos;i=device/palm");
+        @display("p=$xpos,$ypos;i=device/palm;is=vs");
     gates:
         input radioIn @directIn;
     //	    output radioOut;

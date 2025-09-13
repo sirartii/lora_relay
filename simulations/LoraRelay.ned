@@ -30,8 +30,15 @@ network LoraRelay
 {
     parameters:
         int numEndnodes = default(15);
+        double playgroundWidth = default(1400); // pixels (canvas)
+        double playgroundHeight = default(900);
 
-        @display("bgb=1685.2676,526.73254");
+        double gw1x = 750; //default(playgroundWidth/2);
+        double gw1y = 450;  //default(playgroundHeight/2);
+
+        double R  = 450;
+
+        @display("bgb=1000,900");
     types:
     submodules:
         keeper: Keeper {
@@ -39,8 +46,51 @@ network LoraRelay
         }
 
         endnode[numEndnodes]: Endnode {
-            @display("p=294.4725,59.447502,m,5,100,100;r=1,#FF80FF,#0080FF,2;t=,t,#0080FF");
+            parameters:
+
+                xpos   = parent.gw1x + parent.R * sqrt(uniform(0,1)) * cos(uniform(0, 2*3.14159));
+                ypos   = parent.gw1y + parent.R * sqrt(uniform(0,1)) * sin(uniform(0, 2*3.14159));
+
+                //xpos = uniform(parent.gw1x - 200, parent.gw1x + 200);
+                //ypos = uniform(parent.gw1y -200, parent.gw1y + 200);
+                @display("p=$xpos,$ypos;r=1,#FF80FF,#0080FF,2;t=,t,#0080FF");
         }
+
+        endnode001: Endnode {
+            parameters:
+                xpos = 108+uniform(1,300);
+                ypos = 250+uniform(1,300);
+                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        }
+        endnode002: Endnode {
+            parameters:
+                xpos = 108+uniform(1,300);
+                ypos = 200+uniform(1,300);
+                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        }
+        endnode003: Endnode {
+            parameters:
+                xpos = 108+uniform(1,300);
+                ypos = 150+uniform(1,300);
+                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        }
+
+
+
+        endnode004: Endnode {
+            parameters:
+                xpos = 50+uniform(1,300);
+                ypos = parent.playgroundHeight-50-uniform(1,300);
+                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        }
+        endnode005: Endnode {
+            parameters:
+                xpos = 75+uniform(1,300);
+                ypos = parent.playgroundHeight-75-uniform(1,300);
+                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        }
+
+
 
 //        relay01: Relay {
 //        }
@@ -49,28 +99,39 @@ network LoraRelay
 //        }
 
         gateway: Gateway {
-
-            @display("p=53.917503,262.67502;r=1,#FF8000,black,2");
+            parameters:
+                xpos = parent.gw1x;
+                ypos = parent.gw1y;
+                @display("p=$xpos,$ypos;;r=1,#FF8000,black,2");
         }
-//        endnode1[1]: Endnode {
-//            @display("p=619.36005,345.625");
-//        }
 
-        relay01: Relay {
-            @display("p=608.04,261.795;r=1,#0080C0,#FF0080,2;t=test decoration");
-        }
+        //gateway2: Gateway {
+        //    parameters:
+        //        xpos = 150;
+        //        ypos = 200;
+        //        @display("p=$xpos,$ypos;;r=1,#FF8000,black,2");
+        //}
+
+
+        //relay01: Relay {
+        //    parameters:
+        //        xpos = 608;
+        //        ypos = 261;
+        //        @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
+        //}
 
         lns01: LNS {
             @display("p=53,91");
         }
-//
-//        relay02: Relay {
-//        }
 
-        ipb1: IpBridge {
-            @display("p=1123,108");
-        }
+        //ipb1: IpBridge {
+        //    parameters:
+        //        xpos = 1123;
+        //        ypos = 108;
+        //        @display("p=$xpos,$ypos;");
+        //}
     connections:
         gateway.json <--> lns01.json++;
-        ipb1.json <--> lns01.json++;
+        //gateway2.json <--> lns01.json++;
+        //ipb1.json <--> lns01.json++;
 }

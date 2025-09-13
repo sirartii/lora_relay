@@ -1,0 +1,19 @@
+"../src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run10a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run12a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run14a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run16a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run17a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run18a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run20a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run22a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run24a -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run10b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run12b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run14b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run16b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run17b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run18b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run20b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run22b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini
+"../../RelayLora (1)/src/opp-lora-relay-official_dbg.exe" -r 0 -m -u Cmdenv -c Run24b -n .;../src --sim-time-limit=84000s omnetpp_batch.ini

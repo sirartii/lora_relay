@@ -19,12 +19,16 @@
 #include <omnetpp.h>
 #include <vector>
 #include "common.h"
+#include <unordered_set>
+#include <unordered_map>
+#include <cstdint>
 
 using namespace omnetpp;
 
 namespace opp_lora_relay_official {
 
 class Radio;
+class LoRaPacket;
 
 struct Node
 {
@@ -66,7 +70,7 @@ public:
     void recordColision(int NodeFrom, int nodeTo);
     void recordEnergyConsumption(int Node, double consumption);
 
-    void recordMessageTransmission(int NodeFrom, int MsgNo);
+    void recordMessageTransmission(int NodeFrom, int MsgNo, bool isUplink);
     //void recordMessageReception(int NodeFrom, int MsgNo);
     void recordResultsToFile();
     void recordOfflineTime(int Node, double OfflineTime);
@@ -109,13 +113,16 @@ public:
     virtual void finish() override;
     std::vector<Node> radioDevices;
 
-
-
     // ===== NOWE: magazyny do rozliczenia 'kolizje -> niedostarczenie' =====
     // Klucz 64-bit: (devIdx << 32) ^ pktId
-    static inline long long makeKey(long devIdx, long pktId) {
-        return ( (static_cast<long long>(devIdx) << 32)
-               ^ (static_cast<unsigned long long>(pktId) & 0xFFFFFFFFull) );
+    static inline uint64_t makeKey(long devIdx, long pktId) {
+            return ( (uint64_t)(uint32_t)devIdx << 32 ) | (uint32_t)pktId;
+        }
+    static inline uint64_t makeDevDayKey(long devIdx, int dayIdx) {
+        return ( (uint64_t)(uint32_t)dayIdx << 32 ) | (uint32_t)devIdx;
+    }
+    static inline int dayIndex(const omnetpp::simtime_t& t) {
+        return (int)(t.inUnit(SIMTIME_S) / 86400); // full days since t=0
     }
     // UL
     std::unordered_set<long long> ulCollided_;   // było co najmniej jedno odrzucenie UL z powodu kolizji
@@ -123,6 +130,15 @@ public:
     // DL
     std::unordered_set<long long> dlCollided_;   // EndDevice odrzucił DL z powodu kolizji
     std::unordered_set<long long> dlDelivered_;  // EndDevice odebrał DL (ACK/JOIN ACCEPT)
+
+    std::unordered_map<uint64_t, int> ulDeliveredDay_;
+    std::unordered_set<uint64_t> dailyDeviceDaySuccess_;
+
+    std::unordered_set<uint64_t> dailyReadDeviceDayUL_;   // (day<<32)|dev : >=1 UL dotarł tego dnia
+    std::unordered_set<uint64_t> dailyReadDeviceDayE2E_;  // (day<<32)|dev : >=1 UL+DL (ACK) tego dnia
+
+    int countEndnodes() const;
+
     // (opcjonalnie) zachowaj stary licznik dla kompatybilności; przestanie być używany:
     long noCollisions = 0; // DEPRECATED – nie używaj w nowych miejscach
 
@@ -137,9 +153,15 @@ public:
 
     double totalPacketTime;
     int totalPacketsDelivered;
-    int totalPacketsTransmitted;
+
+    long totalPacketsTransmittedUL = 0;
+    long totalPacketsTransmittedDL = 0;
+    long totalPacketsTransmitted   = 0; // suma dla kompatybilności
+
     double offlinePercentage;
     double offlineMax;
+
+    const int SECONDS_PER_DAY = 86400;
 };
 
 } //namespace

@@ -63,6 +63,7 @@ protected:
     double transmissionTimeInSec(int msgSize, int sf);
     void updateRadioActivity(RadioActivity::ra newRA);
     void dropByCollision(LoRaPacket* lp);
+    static inline double readCoord(cModule* m, const char* name, int tagIndex);
 
     double rssiOfCurrentReceive;
     DevType deviceType;

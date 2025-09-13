@@ -54,16 +54,11 @@ void Radio::initialize()
         deviceType = DevType::DEVUNKNOWN;
     }
 
-    //cModule *parent = getParentModule();  // get the parent module
-    const char *pos = parent->getDisplayString().getTagArg("p", 0);  // x coordinate
-    const char *posY = parent->getDisplayString().getTagArg("p", 1); // y coordinate
-
-    position.x = atof(pos);
-    position.y = atof(posY);
 
 
-    //position.x = getAncestorPar("xpos").doubleValue();
-    //position.y = getAncestorPar("ypos").doubleValue();
+    cModule* host = this->getParentModule();
+    position.x = host->par("xpos").doubleValue();
+    position.y = host->par("ypos").doubleValue();
 
 
     sensitivity = par("sensitivityAllRadios").doubleValue();
@@ -504,8 +499,10 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
     {
         LoRaPacket *job;
         job = (LoRaPacket*)msg;
-        job->senderPositionX = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
-        job->senderPositionY = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
+
+        cModule* en = getParentModule();                 // Radio jest submodułem Endnode
+        job->senderPositionX = position.x;
+        job->senderPositionY = position.y;
         job->transmissionPower = txPower;
         job->channel = 1; //TODO
         job->spreadingFactor = 12; //TODO
@@ -546,6 +543,9 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
             continue;
         }
 
+        sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
+
+        /*
         std::string s = device.radio->getParentModule()->getFullName();
         if (deviceType == DevType::ENDNODE)
         {
@@ -554,7 +554,7 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
             }
         } else {
             sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
-        }
+        }*/
         //if (((Radio*)target)->isListening())
     }
     keeper->recordFrameTransmission(myKeeperIndex, msg->calcMsgDuration());
@@ -580,8 +580,8 @@ bool Radio::isListening()
 }
 double Radio::getRssi(LoRaPacket *msg)
 {
-    position.x = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
-    position.y = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
+    //position.x = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
+    //position.y = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
 
     double distance = sqrt(
             pow(position.x - msg->senderPositionX, 2) + pow(position.y - msg->senderPositionY, 2));
@@ -694,6 +694,14 @@ void Radio::finish()
     recordScalar("Energy consumption total Rx", this->energyConsumptionRx);
     recordScalar("Energy consumption total Idle", this->energyConsumptionIdle);
     recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
+}
+
+static inline double readCoord(cModule* m, const char* name, int tagIndex) {
+    if (m->hasPar(name))               // preferuj parametry
+        return m->par(name).doubleValue();
+    // fallback: spróbuj display string "p"
+    const char* s = m->getDisplayString().getTagArg("p", tagIndex);
+    return (s && *s) ? atof(s) : 0.0;
 }
 
 }

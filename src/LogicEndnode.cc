@@ -29,7 +29,7 @@ LogicEndnode::LogicEndnode()
 
 LogicEndnode::~LogicEndnode()
 {
-    cancelAndDelete(timerMessageWindow1);
+    if (timerMessageWindow1) cancelAndDelete(timerMessageWindow1);
     if (timerMessageWindow2) cancelAndDelete(timerMessageWindow2);
 }
 
@@ -378,7 +378,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
         job->isUplink = true;
 
         send(job, "logicOut");
-        keeper->recordMessageTransmission(myKeeperIndex, packetCounter);
+        keeper->recordMessageTransmission(myKeeperIndex, packetCounter, true);
 
         if (waitingResponse)
         {

@@ -1,0 +1,26 @@
+--- Endnode.ned
++++ Endnode.ned
+@@ -24,19 +24,19 @@
+     parameters:
+         double xpos = default(100);
+         double ypos = default(100);
+-        @display("p=$xpos,$ypos;i=device/palm");
++        @display("p=$xpos,$ypos;i=device/palm;is=vs");
+     gates:
+         input radioIn @directIn;
+     //	    output radioOut;
+     submodules:
+         radio: Radio {
+-            @display("p=374,249");
++            @display("p=374,249;is=vs");
+         }
+         logic: LogicEndnode {
+-            @display("p=35,28");
++            @display("p=35,28;is=vs");
+         }
+         distortion: Distortion {
+-            @display("p=178,171");
++            @display("p=178,171;is=vs");
+         }
+     connections:
+         radio.radioIn <-- radioIn;

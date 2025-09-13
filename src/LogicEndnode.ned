@@ -32,7 +32,7 @@ simple LogicEndnode
         @signal[wakeupRelay](type=double);
 
 		int framesPerWindowMin = default(1);
-		int framesPerWindowMax = default(4);
+		int framesPerWindowMax = framesPerWindowMin;
 		int windowsPerDay = default(2);
 
 
