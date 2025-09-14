@@ -32,11 +32,12 @@ network LoraRelay
         int numEndnodes = default(15);
         double playgroundWidth = default(1400); // pixels (canvas)
         double playgroundHeight = default(900);
-
         double gw1x = 750; //default(playgroundWidth/2);
         double gw1y = 450;  //default(playgroundHeight/2);
-
-        double R  = 450;
+		int framesPerWindowMin = default(1);
+		int framesPerWindowMax = default(1);
+		int transmittingWindowDuration1 = default(180);
+        double R  = 350;
 
         @display("bgb=1000,900");
     types:

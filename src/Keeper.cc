@@ -18,7 +18,13 @@
 #include <ctime>
 #include <chrono>
 #include <iomanip>
-#include <cstdlib>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>   // std::atof
+#include <ctime>     // std::time, std::ctime
 
 namespace opp_lora_relay_official {
 
@@ -315,6 +321,73 @@ static long diffCount(const std::unordered_set<long long>& A,
     return cnt;
 }
 
+inline void getXYFromModule(cModule* m, double& x, double& y) {
+    x = y = 0.0;
+    if (!m) return;
+    const char* xs = m->getDisplayString().getTagArg("p", 0);
+    const char* ys = m->getDisplayString().getTagArg("p", 1);
+    if (m->hasPar("xpos")) x = m->par("xpos").doubleValue();
+    else                   x = (xs && *xs) ? std::atof(xs) : 0.0;
+    if (m->hasPar("ypos")) y = m->par("ypos").doubleValue();
+    else                   y = (ys && *ys) ? std::atof(ys) : 0.0;
+}
+
+inline bool fileExists(const char* path) {
+    std::ifstream f(path); return f.good();
+}
+
+inline std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c){ return (char)std::tolower(c); });
+    return s;
+}
+
+struct Anchor { const char* role; int idx; double x; double y; };
+
+void collectAnchorsRecursive(cModule* parent, std::vector<Anchor>& out) {
+    for (cModule::SubmoduleIterator it(parent); !it.end(); ++it) {
+        cModule* m = *it;
+        std::string n  = toLower(m->getName());
+        std::string fn = toLower(m->getFullName());
+
+        const char* role = nullptr;
+        if (n.find("gateway") != std::string::npos || fn.find("gateway") != std::string::npos)
+            role = "GW";
+        else if (n.find("relay") != std::string::npos || fn.find("relay") != std::string::npos)
+            role = "RELAY";
+        else if (n.find("ipbridge") != std::string::npos || fn.find("ipbridge") != std::string::npos ||
+                 n == "ipb" || fn.find("ipb") != std::string::npos)
+            role = "IPB";
+
+        if (role) {
+            double x=0.0, y=0.0; getXYFromModule(m, x, y);
+            const int idx = m->isVector() ? m->getIndex() : 0;
+            out.push_back({role, idx, x, y});
+        }
+        // rekurencja wgłąb
+        collectAnchorsRecursive(m, out);
+    }
+}
+
+void writeAnchorsIfMissing(const char* filename) {
+    if (fileExists(filename)) return;
+
+    std::vector<Anchor> anchors;
+    if (cModule* root = getSimulation()->getSystemModule())
+        collectAnchorsRecursive(root, anchors);
+
+    std::ofstream topo(filename, std::ios::out);
+    topo << std::fixed << std::setprecision(2);
+    std::time_t now = std::time(nullptr);
+
+    topo << "# Fixed nodes (Gateways/Relays/IPBridge)\n";
+    topo << "# Written on: " << std::ctime(&now) << "\n";
+    topo << "role,idx,x,y\n";
+    for (const auto& a : anchors)
+        topo << a.role << "," << a.idx << "," << a.x << "," << a.y << "\n";
+    topo << "\n";
+}
+
 
 void Keeper::recordResultsToFile()
 {
@@ -363,7 +436,6 @@ void Keeper::recordResultsToFile()
 
     totalPacketsTransmitted = totalPacketsTransmittedUL + totalPacketsTransmittedDL;
 
-
     if (outFile.is_open()) {
         outFile << std::fixed << std::setprecision(2);
         outFile << std::ctime(&now);  // np. "Thu Jul 25 15:31:01 2025\n"
@@ -375,6 +447,8 @@ void Keeper::recordResultsToFile()
         outFile << "Distortion     = " << par("enableKeeperDistortion").str() << "\n";
         outFile << "Max miss       = " << par("missedPacketsToSearchRelay").str() << "\n";
         outFile << "Simulated days = " << simDays << "\n";
+        outFile << "Window len [h] = " << getSimulation()->getSystemModule()->par("transmittingWindowDuration1").str() << "\n";
+        outFile << "Frames / window= " << getSimulation()->getSystemModule()->par("framesPerWindowMin").str() << "\n";
         outFile <<  "\n";
 
         outFile << "============== Results ================\n";
@@ -406,9 +480,10 @@ void Keeper::recordResultsToFile()
         //outFile << "Daily device-days successful (E2E) = "
         //        << successfulE2E << " / " << totalDeviceDays << "\n";
 
-        outFile << "Days device-days total (UL) = " << totalDeviceDays << "\n";
-        outFile << "Days device-days successful (UL) = " << successfulUL << "\n";
-        outFile << "Daily read success (UL) = " << dailyUL << "[%]\n";
+        outFile << "Days device-days total (UL)[%] = " << totalDeviceDays << "\n";
+        outFile << "Days device-days successful (UL)[%] = " << successfulUL << "\n";
+        outFile << "Daily read success (UL)[%] = " << dailyUL << "[%]\n";
+        outFile << "Daily read success (UL/DL)[%] = " << dailyE2E << "[%]\n";
         outFile <<  "\n";
 
         outFile << "Collisions uplink = " << noCollisionsUL << "\n";
@@ -421,15 +496,15 @@ void Keeper::recordResultsToFile()
         //outFile << "Devices online avg = " << endnodeStatusVector.getMean() << "\n";
         //outFile << "Devices online min = " << endnodeStatusVector.getMin() << "\n";
 
-        outFile << "Devices re-join count = " << offlineTime.getCount() << "\n";
+        outFile << "Devices re-join count = " << offlineTime.getCount()-endnodes << "\n";           //-endnodes ze względu na 1 laczenie
         outFile << "Devices offline longest = " << offlineTime.getMax() << "[s]\n";
         outFile << "Devices offline avg = " << offlineTime.getMean() << "[s]\n";
         outFile <<  "\n";
 
-        outFile << "Endnode consumption max = " << energyConsumption.getMax()/3600 << "[mAh]\n";
-        outFile << "Endnode consumption avg = " << energyConsumption.getMean()/3600 << "[mAh]\n";
-        outFile << "Endnode consumption min = " << energyConsumption.getMin()/3600 << "[mAh]\n";
-        outFile << "Endnode consumption Relay = " << energyConsumptionRelay/3600 << "[mAh]\n";
+        outFile << "Endnode consumption max [mAh] = " << energyConsumption.getMax()/3600 << "\n";
+        outFile << "Endnode consumption avg [mAh] = " << energyConsumption.getMean()/3600 << "\n";
+        outFile << "Endnode consumption min [mAh] = " << energyConsumption.getMin()/3600 << "\n";
+        outFile << "Endnode consumption Relay [mAh] = " << energyConsumptionRelay/3600 << "\n";
 
         outFile << "--------------------------\n";
 
@@ -439,6 +514,7 @@ void Keeper::recordResultsToFile()
     }
 
 
+    writeAnchorsIfMissing("exec_results_topology.txt");
     std::ofstream topoFile("exec_results_topology.txt", std::ios::app);
     if (topoFile.is_open()) {
         topoFile << std::fixed << std::setprecision(2);
@@ -527,6 +603,7 @@ void Keeper::finish()
     recordScalar("Total utilisation", totalDuration / simTime());
     recordScalar("Average packet time", (totalPacketsDelivered > 0 ? totalPacketTime / totalPacketsDelivered : 0.0));
     recordScalar("Total packets delivered", totalPacketsDelivered);
+    recordScalar("Daily succes rate", dailyReadSuccess);
 
     recordResultsToFile();
 }
@@ -537,6 +614,5 @@ int Keeper::countEndnodes() const {
         if (nd.devType == DevType::ENDNODE) ++n;
     return n;
 }
-
 
 } //namespace

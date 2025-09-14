@@ -25,8 +25,11 @@ network DailyRead_1GW
         double playgroundWidth  = default(1400);
         double playgroundHeight = default(900);
         int endnodeIconSize = default(10);
+        int framesPerWindowMin = default(1);
+        int framesPerWindowMax = default(1);
         double gw1x = default(playgroundWidth*0.33);
         double gw1y = default(playgroundHeight/2);
+        int transmittingWindowDuration1 = default(180);
         @display("b=$playgroundWidth,$playgroundHeight");
 
 

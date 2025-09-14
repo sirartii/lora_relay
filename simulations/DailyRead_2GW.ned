@@ -29,6 +29,9 @@ network DailyRead_2GW
         double gwAy = default(playgroundHeight/2);
         double gwBx = default(playgroundWidth*0.67);
         double gwBy = default(playgroundHeight/2);
+        int framesPerWindowMin = default(1);
+        int framesPerWindowMax = default(1);
+        int transmittingWindowDuration1 = default(180);
         @display("b=$playgroundWidth,$playgroundHeight");
 
     submodules:
