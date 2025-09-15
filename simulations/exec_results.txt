@@ -1,1 +1,184 @@
-	
+Mon Sep 15 21:20:10 2025
+
+
+============== Simulation Parames ================
+ED             = 55
+Scenario       = LoraRelay
+Model          = 2
+Distortion     = 1
+Max miss       = 3
+Simulated days = 30
+Window len [h] = 180
+Frames / window= 1
+
+============== Results ================
+Total utilisation = 0.39[%]
+
+Packets transmitted UL = 3296
+Packets transmitted DL = 705
+Packets transmitted = 4001
+
+Packets delivered UL = 2964
+Packets delivered DL = 635
+Packets delivered = 3599
+
+Packets delivered UL ef = 89.93[%]
+Packets delivered DL ef = 90.07[%]
+Average packet delivery time = 0.00
+
+Days device-days total (UL)[%] = 1650
+Days device-days successful (UL)[%] = 1584
+Daily read success (UL)[%] = 96.00[%]
+Daily read success (UL/DL)[%] = 38.48[%]
+
+Collisions uplink = 57
+Colissions downlink = 4
+Total collisions = 61
+
+Devices re-join count = 7
+Devices offline longest = 1175657.99[s]
+Devices offline avg = 55652.40[s]
+
+Endnode consumption max [mAh] = 19.63
+Endnode consumption avg [mAh] = 19.61
+Endnode consumption min [mAh] = 19.16
+Endnode consumption Relay [mAh] = -0.00
+--------------------------
+Mon Sep 15 21:20:33 2025
+
+
+============== Simulation Parames ================
+ED             = 55
+Scenario       = LoraRelay
+Model          = 2
+Distortion     = 1
+Max miss       = 3
+Simulated days = 30
+Window len [h] = 180
+Frames / window= 1
+
+============== Results ================
+Total utilisation = 0.39[%]
+
+Packets transmitted UL = 3296
+Packets transmitted DL = 705
+Packets transmitted = 4001
+
+Packets delivered UL = 2964
+Packets delivered DL = 635
+Packets delivered = 3599
+
+Packets delivered UL ef = 89.93[%]
+Packets delivered DL ef = 90.07[%]
+Average packet delivery time = 0.00
+
+Days device-days total (UL)[%] = 1650
+Days device-days successful (UL)[%] = 1584
+Daily read success (UL)[%] = 96.00[%]
+Daily read success (UL/DL)[%] = 38.48[%]
+
+Collisions uplink = 57
+Colissions downlink = 4
+Total collisions = 61
+
+Devices re-join count = 7
+Devices offline longest = 1175657.99[s]
+Devices offline avg = 55652.40[s]
+
+Endnode consumption max [mAh] = 19.63
+Endnode consumption avg [mAh] = 19.61
+Endnode consumption min [mAh] = 19.16
+Endnode consumption Relay [mAh] = -0.00
+--------------------------
+Mon Sep 15 21:20:58 2025
+
+
+============== Simulation Parames ================
+ED             = 55
+Scenario       = LoraRelay
+Model          = 2
+Distortion     = 1
+Max miss       = 3
+Simulated days = 30
+Window len [h] = 180
+Frames / window= 1
+
+============== Results ================
+Total utilisation = 0.39[%]
+
+Packets transmitted UL = 3296
+Packets transmitted DL = 705
+Packets transmitted = 4001
+
+Packets delivered UL = 2964
+Packets delivered DL = 635
+Packets delivered = 3599
+
+Packets delivered UL ef = 89.93[%]
+Packets delivered DL ef = 90.07[%]
+Average packet delivery time = 0.00
+
+Days device-days total (UL)[%] = 1650
+Days device-days successful (UL)[%] = 1584
+Daily read success (UL)[%] = 96.00[%]
+Daily read success (UL/DL)[%] = 38.48[%]
+
+Collisions uplink = 57
+Colissions downlink = 4
+Total collisions = 61
+
+Devices re-join count = 7
+Devices offline longest = 1175657.99[s]
+Devices offline avg = 55652.40[s]
+
+Endnode consumption max [mAh] = 19.63
+Endnode consumption avg [mAh] = 19.61
+Endnode consumption min [mAh] = 19.16
+Endnode consumption Relay [mAh] = -0.00
+--------------------------
+Mon Sep 15 21:21:35 2025
+
+
+============== Simulation Parames ================
+ED             = 55
+Scenario       = LoraRelay
+Model          = 2
+Distortion     = 0
+Max miss       = 2
+Simulated days = 30
+Window len [h] = 180
+Frames / window= 1
+
+============== Results ================
+Total utilisation = 0.39[%]
+
+Packets transmitted UL = 3293
+Packets transmitted DL = 709
+Packets transmitted = 4002
+
+Packets delivered UL = 2961
+Packets delivered DL = 627
+Packets delivered = 3588
+
+Packets delivered UL ef = 89.92[%]
+Packets delivered DL ef = 88.43[%]
+Average packet delivery time = 0.00
+
+Days device-days total (UL)[%] = 1650
+Days device-days successful (UL)[%] = 1574
+Daily read success (UL)[%] = 95.39[%]
+Daily read success (UL/DL)[%] = 37.88[%]
+
+Collisions uplink = 44
+Colissions downlink = 4
+Total collisions = 48
+
+Devices re-join count = 10
+Devices offline longest = 2080554.36[s]
+Devices offline avg = 88062.99[s]
+
+Endnode consumption max [mAh] = 5.15
+Endnode consumption avg [mAh] = 5.10
+Endnode consumption min [mAh] = 4.37
+Endnode consumption Relay [mAh] = -0.00
+--------------------------

@@ -28,6 +28,9 @@ simple LNS
         double listeningWindowRXR; //listening relay window duration in seconds
         double listeningWindowRXC; //time between transmission and RX1, and beetween RX1 and RX2, in seconds
         double listeningWindowRXCR; //time beetween RX2 and RXR, in seconds
+        int forceSF = default(12);
+        double ADRtarget	= default(6);			//what is ideal rssi margin
+        double ADRtolerance = default(3);		//+- what value does not change value;
 
     gates:
        inout json[];	//wektor do połaczenia wielu Gateway

@@ -71,6 +71,7 @@ class LNS : public omnetpp::cSimpleModule
     void onUplinkArrived(LoRaPacket* ul, int inGateIdx);
     void onDedupTimer(omnetpp::cMessage* self);
     void processUniqueUplink(DedupEntry& e, int preferOutGate);
+    void calcADR(LoRaPacket* packet, double rssiMargin);
     double responseTime() const;
 
     // --- cSimpleModule ---

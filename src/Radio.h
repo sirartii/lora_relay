@@ -60,7 +60,6 @@ protected:
     void directSendWithDelete(LoRaPacket *msg);
 
 //    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
-    double transmissionTimeInSec(int msgSize, int sf);
     void updateRadioActivity(RadioActivity::ra newRA);
     void dropByCollision(LoRaPacket* lp);
     static inline double readCoord(cModule* m, const char* name, int tagIndex);
@@ -83,6 +82,7 @@ protected:
     bool listeningWindowRXRactive;
     bool disableLAT;
     int collisionCount;
+    int lastSpreadingFactor;
 
 //    cMessage *radioRX1Timer;
 //    cMessage *radioRX2Timer;

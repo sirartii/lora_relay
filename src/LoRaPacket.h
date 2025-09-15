@@ -30,6 +30,7 @@ public:
 
     double CalculateCADLength(int SpreadingFactor);
     int calcBitrate();
+    float calcSensitivity();
     int calcMsgPreamble();
     int isWOR();
     int autodetectUplink();
@@ -52,6 +53,7 @@ public:
     float transmissionPower;
     short spreadingFactor;
     float rssi;
+    float rssi_margin;
 
     float senderPositionX;
     float senderPositionY;

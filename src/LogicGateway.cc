@@ -41,7 +41,10 @@ void LogicGateway::handleMessage(cMessage *msg) {
                 EV << simTime() << " LNS Gateway got correct loRa Wan packet!";
             }
             if (LoRaMsg->autodetectUplink())
+            {
+                //dodać
                 send(((LoRaPacket*)msg)->dupLoRa(),"json$o");               //Not fully understand why need to be duplicate but otherwise getting runtime error
+            }
         }
         if (msg->arrivedOn("json$i"))
         {

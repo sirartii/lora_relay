@@ -132,6 +132,7 @@ void Radio::initialize()
 
 
     wakeupRelay = registerSignal("wakeupRelay");
+    lastSpreadingFactor = 12;
 
     if(deviceType == DevType::RELAY)
         getSimulation()->getSystemModule()->subscribe("wakeupRelay", this);
@@ -237,6 +238,14 @@ void Radio::handleMessage(cMessage *msg)
                 if (currentRcvMessage != nullptr){
                     send(currentRcvMessage, "toLogic");
                     EV << "RADIO " << tmp_name << " t=" << simTime() << " rcv ok, sending to logic\n";
+
+                    if (par("forceSF").intValue() == -1 && currentRcvMessage->getKind() == MsgType::ACK)        //ADR en
+                    {
+                        if (currentRcvMessage->hasPar("ADR+") && lastSpreadingFactor < 12)
+                            lastSpreadingFactor++;
+                        if (currentRcvMessage->hasPar("ADR-") && lastSpreadingFactor > 7)
+                            lastSpreadingFactor--;
+                    }
                 }
 
                 getParentModule()->getDisplayString().setTagArg("t",0,"");
@@ -246,6 +255,8 @@ void Radio::handleMessage(cMessage *msg)
                 else {
                     updateRadio();
                 }
+
+
 
                 currentRcvMessage = nullptr;
                 delete msg;         //special object was created for the event so it's time to remove unused object
@@ -261,7 +272,11 @@ void Radio::handleMessage(cMessage *msg)
     }
     else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
         if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
+        {
+            if(msg->getKind() == MsgType::JOINREQUEST)                  //wyzeruj ADR
+                lastSpreadingFactor = 12;
             sendToNetwork((LoRaPacket*)msg);
+        }
         else
             //TODO: control messages to enable radio listen etc
             EV << "RADIO " << tmp_name << " Got unknown packet to send " << this->getParentModule()->getFullName() << " \n";
@@ -372,15 +387,16 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     rssi = getRssi((LoRaPacket*)msg);
 
     //calculate sensitivity based on keeper distortion activity
-    realSensitivity = sensitivity + sqrt(keeper->distortionLevel);
+    realSensitivity = sensitivity + sqrt(keeper->distortionLevel) + 2.5 * (12-msg->spreadingFactor);            //każde zmniejszenie SF powoduje 2,5db mniejszy rpóg detekcji
 
     //apply random variation based on signal observation
     double currentPL = normal(0, par("pathlosStd"));
     rssi += currentPL;
 
     msg->rssi = rssi;
+    msg->rssi_margin = rssi - realSensitivity;
 
-    EV << "RADIO " << tmp_name << " t=" << simTime() << " frame " << msg->getKind() << " RSSI = " << rssi << " PLR = "<<currentPL <<" ";
+    EV << "RADIO " << tmp_name << " t=" << simTime() << " frame " << msg->getKind() << " RSSI = " << rssi << " SF=" << msg->spreadingFactor <<" PLR = "<<currentPL <<" ";
 
     if (radioActivity == RadioActivity::LISTENING) {
         if (rssi > realSensitivity) {
@@ -505,7 +521,9 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
         job->senderPositionY = position.y;
         job->transmissionPower = txPower;
         job->channel = 1; //TODO
-        job->spreadingFactor = 12; //TODO
+        job->spreadingFactor = par("forceSF").intValue();
+        if (job->spreadingFactor == -1)     //means ADR enabled
+            job->spreadingFactor = lastSpreadingFactor;
 
         //int msgSize = job->length;
         //int spreadingfactor = job->spreadingFactor;
@@ -660,28 +678,6 @@ void Radio::updateRadioActivity(RadioActivity::ra newRA)
  *
  */
 
-double Radio::transmissionTimeInSec(int msgSize, int sf) // sf - spreading factor 7 - 12; parameter - rozmiar wiadomosci w bajtach
-{ //przeliczanie jak dlugo dana wiadomosc bedzie sie transmitowala - funkcja z symulacji Rafala
-    double de = 0;
-    if (sf == 11 || sf == 12)
-        de = 1;
-    int bandwidth = 125;
-    int loraHeaderSize = 13;
-    int preambleSymbols = 8;
-    double explicitHeader = 1;
-    int codingRate = 5;
-    double I18 = pow(2, sf) / (bandwidth * 1000) * 1000;
-    double I19 = (preambleSymbols + 4.25) * I18;
-    double roundUp = ceil(
-            ((8 * (msgSize + loraHeaderSize) - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) / (4 * (sf - 2 * de))))
-            * codingRate;
-    double maximum = fmax(roundUp, 0);
-    double I20 = 8 + maximum;
-    double I21 = I20 * I18;
-    double formula = I19 + I21;
-
-    return formula / 1000.0;
-}
 
 bool Radio::isOffOrUnknown() const noexcept {
     return (radioActivity == RadioActivity::RADIOOFF)

@@ -70,9 +70,7 @@ void LNS::handleMessage(cMessage *msg)
         pck->relayRequired = msgLoRa->isRelayed;
         pck->isRelayed = false;
         pck->transmissionPower = 14;
-        pck->spreadingFactor = 12;
-
-        //pck->id = 0;
+        //pck->spreadingFactor = 12;
 
         send(pck, "json$o", msgLoRa->gateLNS);
         keeper->recordMessageTransmission(0, ++packetCounter, false);
@@ -93,20 +91,18 @@ void LNS::handleMessage(cMessage *msg)
     if (msg->arrivedOn("json$i")) {
 
         int inGate = msg->getArrivalGate()->getIndex();
-        auto *ul = check_and_cast<LoRaPacket*>(msg);
+        LoRaPacket *ul = check_and_cast<LoRaPacket*>(msg);
 
         onUplinkArrived(ul, inGate);  // *** DEDUP *** (zatrzymuje lub „wchłania” kopie)
         return;
 
-
-
-
-
         //below we are certain that message is LoRa Packtet comming from outside
 
+        /*
         double responseTime = par("listeningWindowRXC").doubleValue() + (par("listeningWindowRX1").doubleValue() / 2);
         LoRaPacket *response = ((LoRaPacket*)msg)->dupLoRa();
         response->gateLNS = msg->getArrivalGate()->getIndex();
+        response->spreadingFactor = ul->spreadingFactor;
 
 
         if (msg->getKind() == (short)MsgType::JOINREQUEST)
@@ -147,6 +143,8 @@ void LNS::handleMessage(cMessage *msg)
                 if (uniform(0,100) > 95)
                     response->length = 50;
 
+
+
                 scheduleAt(simTime() + responseTime, response);
             }
         }
@@ -160,7 +158,16 @@ void LNS::handleMessage(cMessage *msg)
         keeper->recordMessageReception(msg->par("KeeperIndex"), msg->par("PacketId"));
 
         delete msg;
+        */
     }
+}
+
+void LNS::calcADR(LoRaPacket* packet, double rssiMargin)
+{
+    if (rssiMargin > par("ADRtarget").doubleValue() + par("ADRtolerance").doubleValue())
+        packet->addPar("ADR-");
+    if (rssiMargin < par("ADRtarget").doubleValue() - par("ADRtolerance").doubleValue())
+        packet->addPar("ADR+");
 }
 
 void LNS::onUplinkArrived(LoRaPacket* ul, int inGateIdx)
@@ -278,6 +285,8 @@ void LNS::processUniqueUplink(DedupEntry& e, int preferOutGate)
             response->length = 15;
             if (uniform(0,100) > 95)
                 response->length = 50;
+
+            calcADR(response, ul->rssi_margin);
 
             scheduleAt(when, response);
             EV << simTime() << " LNS Scheduling ACK in " << (when - simTime()) << "s via json[" << preferOutGate << "]\n";

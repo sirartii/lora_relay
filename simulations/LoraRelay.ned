@@ -30,6 +30,9 @@ network LoraRelay
 {
     parameters:
         int numEndnodes = default(15);
+        int extranodex1 = int((numEndnodes*3)/50);
+        int extranodex2 = int((numEndnodes*2)/50);
+
         double playgroundWidth = default(1400); // pixels (canvas)
         double playgroundHeight = default(900);
         double gw1x = 750; //default(playgroundWidth/2);
@@ -57,41 +60,19 @@ network LoraRelay
                 @display("p=$xpos,$ypos;r=1,#FF80FF,#0080FF,2;t=,t,#0080FF");
         }
 
-        endnode001: Endnode {
+        endnode1[extranodex1]: Endnode {
             parameters:
                 xpos = 108+uniform(1,300);
                 ypos = 250+uniform(1,300);
                 @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
         }
-        endnode002: Endnode {
-            parameters:
-                xpos = 108+uniform(1,300);
-                ypos = 200+uniform(1,300);
-                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
-        }
-        endnode003: Endnode {
-            parameters:
-                xpos = 108+uniform(1,300);
-                ypos = 150+uniform(1,300);
-                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
-        }
 
-
-
-        endnode004: Endnode {
+        endnode2[extranodex2]: Endnode {
             parameters:
                 xpos = 50+uniform(1,300);
                 ypos = parent.playgroundHeight-50-uniform(1,300);
                 @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
         }
-        endnode005: Endnode {
-            parameters:
-                xpos = 75+uniform(1,300);
-                ypos = parent.playgroundHeight-75-uniform(1,300);
-                @display("p=$xpos,$ypos;;r=1,#0080C0,#FF0080,2;t=test decoration");
-        }
-
-
 
 //        relay01: Relay {
 //        }

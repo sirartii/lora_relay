@@ -23,6 +23,8 @@ simple Radio
     parameters:
         @display("i=block/source");
         double txPower = default(14);
+        int forceSF = default(12);			//-1 means ADR enabled
+
         //double sensitivity = default(sensitivityAllRadios);
         double attenuation = uniform(0,20);
         double pathlosStd;

@@ -47,6 +47,7 @@ LoRaPacket::LoRaPacket(LoRaPacket* duplicate) : cMessage(*duplicate)
     transmissionPower = duplicate->transmissionPower;
     spreadingFactor = duplicate->spreadingFactor;
     rssi = duplicate->rssi;
+    rssi_margin = duplicate->rssi_margin;
 
     senderPositionX = duplicate->senderPositionX;
     senderPositionY = duplicate->senderPositionY;
@@ -71,6 +72,7 @@ LoRaPacket::LoRaPacket(const char *name, short kind) : cMessage(name, kind)
     transmissionPower = 14;
     spreadingFactor = 12;
     rssi = 0;
+    rssi_margin = 1;
 
     senderPositionX = 0;
     senderPositionY = 0;
@@ -94,6 +96,27 @@ int LoRaPacket::calcBitrate()
             return 3125;
         case 7:
             return 5470;
+        default:
+            return 0;
+    }
+}
+
+float LoRaPacket::calcSensitivity()
+{
+    switch (this->spreadingFactor)
+    {
+        case 12:
+            return 20;
+        case 11:
+            return 17.5;
+        case 10:
+            return 15;
+        case 9:
+            return 12.5;
+        case 8:
+            return 10;
+        case 7:
+            return 7.5;
         default:
             return 0;
     }
