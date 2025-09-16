@@ -148,6 +148,8 @@ void LogicEndnode::handleMessage(cMessage *msg)
                 //updateLogicalState(EndDeviceState::OFFLINE);
                 updateLogicalState(EndDeviceState::JOIN_RELAY);
             }
+            cMessage* ra = new cMessage("ResetADR",MsgType::RESET_ADR);
+            send(ra, "logicOut");
             return;
         }
 
@@ -368,7 +370,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
         job->senderPositionY   = getParentModule()->par("ypos").doubleValue();
         job->transmissionPower = 14;
         job->channel           = 1;   // TODO
-        job->spreadingFactor   = 12;  // TODO
+        job->spreadingFactor   = par("forceSF").intValue();  // TODO
         job->addPar("KeeperIndex") = myKeeperIndex;
         job->addPar("PacketId")    = packetCounter;
 

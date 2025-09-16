@@ -34,6 +34,7 @@ simple LogicEndnode
 		int framesPerWindowMin = default(1);
 		int framesPerWindowMax = framesPerWindowMin;
 		int windowsPerDay = default(2);
+		int forceSF = default(12);
 
 
 	gates:

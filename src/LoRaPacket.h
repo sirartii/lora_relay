@@ -59,6 +59,7 @@ public:
     float senderPositionY;
 
     int gateLNS;
+    int senderId;
 };
 
 } /* namespace opp_lora_relay_official */

@@ -271,6 +271,15 @@ void Radio::handleMessage(cMessage *msg)
         }
     }
     else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
+        if (msg->getKind() == MsgType::RESET_ADR)
+        {
+            if (lastSpreadingFactor < 12)
+                lastSpreadingFactor++;
+            delete msg;
+            return;
+        }
+
+
         if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
         {
             if(msg->getKind() == MsgType::JOINREQUEST)                  //wyzeruj ADR
@@ -370,8 +379,10 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     float transmissionTime = 0;
     double rssi = 0;
     double realSensitivity;
-
     bool rcvOK = 0;
+
+    if (msg->senderId != myKeeperIndex && deviceType == DevType::ENDNODE)
+        return;
 
     //verify colisions with transmission:
     if (radioActivity == RadioActivity::TRANSMITTING)              //for gateway colistion is not possible
@@ -516,12 +527,15 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
         LoRaPacket *job;
         job = (LoRaPacket*)msg;
 
+        if (deviceType == DevType::ENDNODE)
+            job->senderId = myKeeperIndex;
+
         cModule* en = getParentModule();                 // Radio jest submodułem Endnode
         job->senderPositionX = position.x;
         job->senderPositionY = position.y;
         job->transmissionPower = txPower;
         job->channel = 1; //TODO
-        job->spreadingFactor = par("forceSF").intValue();
+        //job->spreadingFactor = par("forceSF").intValue();
         if (job->spreadingFactor == -1)     //means ADR enabled
             job->spreadingFactor = lastSpreadingFactor;
 

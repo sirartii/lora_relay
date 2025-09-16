@@ -77,7 +77,11 @@ enum MsgType
     UPLINK,
     DOWNLINK,
     ACK,
-    TIMEOUT
+    TIMEOUT,
+
+
+    //wiadomoci sterujące , nie to tranmisji
+    RESET_ADR
 };
 
 struct Coords

@@ -53,6 +53,7 @@ LoRaPacket::LoRaPacket(LoRaPacket* duplicate) : cMessage(*duplicate)
     senderPositionY = duplicate->senderPositionY;
 
     gateLNS = duplicate->gateLNS;
+    senderId = duplicate->senderId;
 }
 
 
@@ -78,6 +79,7 @@ LoRaPacket::LoRaPacket(const char *name, short kind) : cMessage(name, kind)
     senderPositionY = 0;
 
     gateLNS = 0;
+    senderId = 0;
 }
 
 int LoRaPacket::calcBitrate()

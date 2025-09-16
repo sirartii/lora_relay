@@ -3,3 +3,7 @@ simulations/results/*
 src/opp-lora-relay-official*
 opp-lora-relay-official*
 /.metadata/
+simulations/exec_results.txt
+simulations/exec_results.txt
+simulations/exec_results_topology.txt
+src.zip
