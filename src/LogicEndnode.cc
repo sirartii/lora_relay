@@ -165,78 +165,152 @@ void LogicEndnode::handleMessage(cMessage *msg)
             MsgAfterWOR = 1;
         }
 
-        // --- Okno nadawcze #1 ------------------------------------------------
         if (msg->getKind() == SelfMsgType::TXWINDOW1) {
-            simtime_t dayStart = simTime() - SimTime(dayTime * 60000, SIMTIME_MS);
-            simtime_t start    = dayStart + SimTime(transmittingWindowStart1 * 60000, SIMTIME_MS);
-            simtime_t end      = start   + SimTime(transmittingWindowDuration1 * 60000, SIMTIME_MS);
+            // 1) Początek bieżącej doby: PODŁOGA do 24 h (nie używamy 'dayTime')
+            static const long long DAY_MS = 24LL * 60LL * 60000LL;
+            const long long nowMs  = simTime().inUnit(SIMTIME_MS);
+            const long long day0Ms = (nowMs / DAY_MS) * DAY_MS;
+            simtime_t dayStart     = SimTime(day0Ms, SIMTIME_MS);
 
-            // Jeżeli jesteśmy poza oknem albo brak ramek do wysłania → planuj następny dzień
+            simtime_t start = dayStart + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
+            simtime_t end   = start   + SimTime(1LL * transmittingWindowDuration1 * 60000LL, SIMTIME_MS);
+
+            const long long durMs = (end - start).inUnit(SIMTIME_MS);
+            const int N = framesPerWindowMin; // (jak pisałeś: min == max)
+
+            // 2) Przed startem / po oknie lub brak ramek -> ustaw pierwszy slot i WYJDŹ
             if (simTime() < start || simTime() >= end || framesRemainingWin1 <= 0) {
-                framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                long long durMs = 1LL * transmittingWindowDuration1 * 60LL * 1000LL;
-                long long offMs = durMs > 0 ? intrand((int)durMs) : 0;
-                simtime_t tnext = dayStart + SimTime(24 * 60 * 60000, SIMTIME_MS)
-                                  + SimTime(transmittingWindowStart1 * 60000, SIMTIME_MS)
-                                  + SimTime(offMs, SIMTIME_MS);
-                scheduleAt(tnext, msg);
+                if (framesRemainingWin1 <= 0)
+                    framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+
+                // dziś, jeśli jeszcze przed startem; inaczej jutro
+                simtime_t base = (simTime() < start)
+                               ? start
+                               : (dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                         + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS));
+
+                if (framesRemainingWin1 > 0 && durMs > 0) {
+                    long long slot = std::max(1LL, durMs / framesRemainingWin1);
+                    long long phi  = intrand((int)slot);   // faza na całe okno
+                    base += SimTime(phi, SIMTIME_MS);
+                }
+                if (base <= simTime()) base = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
+                scheduleAt(base, msg);
                 return;
             }
 
-            // Wyślemy jedną ramkę teraz; zaplanuj potencjalne kolejne w tym samym oknie
+            // 3) Jesteśmy w oknie: wyślij TERAZ i zaplanuj kolejną w następnym slocie
             framesRemainingWin1--;
-            simtime_t remaining = end - simTime();
-            long long remMs = remaining.inUnit(SIMTIME_MS);
-            const int minGapMs = 1000; // ≥ 1s przerwy
-            if (framesRemainingWin1 > 0 && remMs > minGapMs) {
-                int jitterMs = intrand((int)(remMs - minGapMs));
-                scheduleAt(simTime() + SimTime(minGapMs + jitterMs, SIMTIME_MS), msg);
-            } else {
-                // brak czasu lub wyczerpany limit → planuj kolejne okno dnia następnego
-                framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                long long durMs = 1LL * transmittingWindowDuration1 * 60LL * 1000LL;
-                long long offMs = durMs > 0 ? intrand((int)durMs) : 0;
-                simtime_t tnext = dayStart + SimTime(24 * 60 * 60000, SIMTIME_MS)
-                                  + SimTime(transmittingWindowStart1 * 60000, SIMTIME_MS)
-                                  + SimTime(offMs, SIMTIME_MS);
-                scheduleAt(tnext, msg);
+
+            if (durMs > 0 && N > 0) {
+                long long slot = std::max(1LL, durMs / N);
+                long long elapsed = (simTime() - start).inUnit(SIMTIME_MS);
+                long long k   = elapsed / slot;
+                long long phi = elapsed - k * slot; // „faza” = (now - start) % slot
+
+                if (framesRemainingWin1 > 0) {
+                    simtime_t tnext = start + SimTime((k + 1) * slot + phi, SIMTIME_MS); // = now + slot (w msowej siatce)
+                    if (tnext >= end) {
+                        // brak miejsca -> pierwszy slot jutrzejszego okna
+                        framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+                        tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                       + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
+                        if (framesRemainingWin1 > 0) {
+                            long long slot2 = std::max(1LL, durMs / framesRemainingWin1);
+                            tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
+                        }
+                    }
+                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
+                    scheduleAt(tnext, msg);
+                    // UWAGA: brak 'return' – poniżej wysyłasz bieżącą ramkę
+                } else {
+                    // to była ostatnia ramka w tym oknie → ustaw pierwszy slot na jutro
+                    framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+                    simtime_t tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                              + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
+                    if (framesRemainingWin1 > 0) {
+                        long long slot2 = std::max(1LL, durMs / framesRemainingWin1);
+                        tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
+                    }
+                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
+                    scheduleAt(tnext, msg);
+                    // bez 'return' – najpierw wyślij bieżącą ramkę
+                }
             }
+
+            // >>> tutaj pozostaje Twój kod, który faktycznie wysyła ramkę "TERAZ"
         }
+
 
         // --- Okno nadawcze #2 ------------------------------------------------
         if (msg->getKind() == SelfMsgType::TXWINDOW2) {
-            simtime_t dayStart = simTime() - SimTime(dayTime * 60000, SIMTIME_MS);
-            simtime_t start    = dayStart + SimTime(transmittingWindowStart2 * 60000, SIMTIME_MS);
-            simtime_t end      = start   + SimTime(transmittingWindowDuration2 * 60000, SIMTIME_MS);
+            static const long long DAY_MS = 24LL * 60LL * 60000LL;
+            const long long nowMs  = simTime().inUnit(SIMTIME_MS);
+            const long long day0Ms = (nowMs / DAY_MS) * DAY_MS;
+            simtime_t dayStart     = SimTime(day0Ms, SIMTIME_MS);
+
+            simtime_t start = dayStart + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
+            simtime_t end   = start   + SimTime(1LL * transmittingWindowDuration2 * 60000LL, SIMTIME_MS);
+
+            const long long durMs = (end - start).inUnit(SIMTIME_MS);
+            const int N = framesPerWindowMin;
 
             if (simTime() < start || simTime() >= end || framesRemainingWin2 <= 0) {
-                framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                long long durMs = 1LL * transmittingWindowDuration2 * 60LL * 1000LL;
-                long long offMs = durMs > 0 ? intrand((int)durMs) : 0;
-                simtime_t tnext = dayStart + SimTime(24 * 60 * 60000, SIMTIME_MS)
-                                  + SimTime(transmittingWindowStart2 * 60000, SIMTIME_MS)
-                                  + SimTime(offMs, SIMTIME_MS);
-                scheduleAt(tnext, msg);
+                if (framesRemainingWin2 <= 0)
+                    framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+
+                simtime_t base = (simTime() < start)
+                               ? start
+                               : (dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                         + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS));
+
+                if (framesRemainingWin2 > 0 && durMs > 0) {
+                    long long slot = std::max(1LL, durMs / framesRemainingWin2);
+                    long long phi  = intrand((int)slot);
+                    base += SimTime(phi, SIMTIME_MS);
+                }
+                if (base <= simTime()) base = simTime() + SimTime(1, SIMTIME_MS);
+                scheduleAt(base, msg);
                 return;
             }
 
             framesRemainingWin2--;
-            simtime_t remaining = end - simTime();
-            long long remMs = remaining.inUnit(SIMTIME_MS);
-            const int minGapMs = 1000;
-            if (framesRemainingWin2 > 0 && remMs > minGapMs) {
-                int jitterMs = intrand((int)(remMs - minGapMs));
-                scheduleAt(simTime() + SimTime(minGapMs + jitterMs, SIMTIME_MS), msg);
-            } else {
-                framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                long long durMs = 1LL * transmittingWindowDuration2 * 60LL * 1000LL;
-                long long offMs = durMs > 0 ? intrand((int)durMs) : 0;
-                simtime_t tnext = dayStart + SimTime(24 * 60 * 60000, SIMTIME_MS)
-                                  + SimTime(transmittingWindowStart2 * 60000, SIMTIME_MS)
-                                  + SimTime(offMs, SIMTIME_MS);
-                scheduleAt(tnext, msg);
+
+            if (durMs > 0 && N > 0) {
+                long long slot = std::max(1LL, durMs / N);
+                long long elapsed = (simTime() - start).inUnit(SIMTIME_MS);
+                long long k   = elapsed / slot;
+                long long phi = elapsed - k * slot;
+
+                if (framesRemainingWin2 > 0) {
+                    simtime_t tnext = start + SimTime((k + 1) * slot + phi, SIMTIME_MS);
+                    if (tnext >= end) {
+                        framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+                        tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                       + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
+                        if (framesRemainingWin2 > 0) {
+                            long long slot2 = std::max(1LL, durMs / framesRemainingWin2);
+                            tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
+                        }
+                    }
+                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS);
+                    scheduleAt(tnext, msg);
+                } else {
+                    framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+                    simtime_t tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
+                                              + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
+                    if (framesRemainingWin2 > 0) {
+                        long long slot2 = std::max(1LL, durMs / framesRemainingWin2);
+                        tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
+                    }
+                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS);
+                    scheduleAt(tnext, msg);
+                }
             }
+
+            // >>> poniżej: wysyłka ramki "TERAZ"
         }
+
 
         // --- Emisja ramki (logika stanu urządzenia) --------------------------
 
@@ -370,9 +444,19 @@ void LogicEndnode::handleMessage(cMessage *msg)
         job->senderPositionY   = getParentModule()->par("ypos").doubleValue();
         job->transmissionPower = 14;
         job->channel           = 1;   // TODO
-        job->spreadingFactor   = par("forceSF").intValue();  // TODO
         job->addPar("KeeperIndex") = myKeeperIndex;
         job->addPar("PacketId")    = packetCounter;
+
+        int sfParam = par("forceSF").intValue();
+        if (endDeviceState == EndDeviceState::JOIN_RELAY ||
+            endDeviceState == EndDeviceState::ONLINE_RELAYED ||
+            job->relayRequired)                      // dodatkowe zabezpieczenie
+        {
+            job->spreadingFactor = 9;
+        }
+        else {
+            job->spreadingFactor = sfParam;
+        }
 
         waitingResponse = job->ackRequired;
 

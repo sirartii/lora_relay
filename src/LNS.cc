@@ -16,6 +16,10 @@
 #include "LNS.h"
 #include "common.h"
 #include "LoRaPacket.h"
+#include <fstream>
+#include <iomanip>
+#include <chrono>
+#include <ctime>
 
 
 namespace opp_lora_relay_official {
@@ -38,6 +42,10 @@ void LNS::initialize()
         dedupHoldoff = par("dedupHoldoff");
 }
 
+inline bool fileExists(const char* path) {
+    std::ifstream f(path); return f.good();
+}
+
 void LNS::finish()
 {
     // *** DEDUP ***: porządki
@@ -47,6 +55,33 @@ void LNS::finish()
         if (e.representative) delete e.representative;
     }
     dedup.clear();
+
+    if (!receivedFrames.empty()) {
+
+        bool append = !fileExists("exec_result_frames.txt");
+
+        std::ofstream out("exec_result_frames.txt", std::ios::app);
+        if (out.is_open()) {
+            if (append){
+                // Nagłówek kolumn dla czytelności (jedna linia)
+                out << "x,y,sf,rssi,rssi_margin\n";
+            }
+
+            // Stała precyzja, by nie „pływały” liczby
+            out << std::fixed << std::setprecision(2);
+
+            for (const auto& f : receivedFrames) {
+                out << std::fixed << std::setprecision(2)
+                    << f.x << "," << f.y << ","
+                    << f.sf << ","
+                    << f.rssi << ","
+                    << f.rssi_margin << "\n";
+            }
+            out.close();
+        } else {
+            EV << "Unable to open exec_result_frames.txt for writing.\n";
+        }
+    }
 }
 
 void LNS::handleMessage(cMessage *msg)
@@ -247,6 +282,14 @@ void LNS::processUniqueUplink(DedupEntry& e, int preferOutGate)
 
     // Pojedynczy wpis do Keepera (tak jak wcześniej, ale TYLKO raz)
     keeper->recordMessageReception(ul->par("KeeperIndex"), ul->par("PacketId"));
+
+    receivedFrames.push_back(ReceivedFrame{
+        static_cast<double>(ul->senderPositionX),
+        static_cast<double>(ul->senderPositionY),
+        static_cast<short>(ul->spreadingFactor),
+        static_cast<double>(ul->rssi),
+        static_cast<double>(ul->rssi_margin)
+    });
 
     // Oblicz, kiedy powinna być odpowiedź (jak u Ciebie)
     const double respT = responseTime();

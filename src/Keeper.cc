@@ -129,11 +129,14 @@ void Keeper::updateEndnodeState(int index, EndDeviceState status)
     if (index >= this->noInitialized)
         return;
 
+    EndDeviceState oldStatus = radioDevices[index].radioStatus;
     radioDevices[index].radioStatus = status;
 
     if (status == EndDeviceState::OFFLINE)
     {
         radioDevices[index].lastOnline = simTime();
+        if (oldStatus == EndDeviceState::ONLINE_DIRECT || oldStatus == EndDeviceState::ONLINE_RELAYED)
+            radioDevices[index].offlineCount++;
     }
     if (status == EndDeviceState::ONLINE_DIRECT || status == EndDeviceState::ONLINE_RELAYED)
     {
@@ -431,10 +434,33 @@ void Keeper::recordResultsToFile()
     const double dailyE2E = (totalDeviceDays > 0)
         ? 100.0 * (double)successfulE2E / (double)totalDeviceDays : 0.0;
 
+
+    // --- czas aktywnych okien na potrzeby wykorzystania kanału
+    cModule* sys = getSimulation()->getSystemModule();
+    const double win1_min = sys->hasPar("transmittingWindowDuration1")? static_cast<double>(sys->par("transmittingWindowDuration1").intValue()) : 0.0;
+    const double win2_min = sys->hasPar("transmittingWindowDuration2")? static_cast<double>(sys->par("transmittingWindowDuration2").intValue()) : 0.0;
+
+    // sekundy aktywne (na dobę i łącznie w symulacji)
+    const double activeSecsPerDay  = (std::max(0.0, win1_min) + std::max(0.0, win2_min)) * 60.0;
+    const double activeSecsTotal   = activeSecsPerDay * simDays;
+
+    // wykorzystanie względem okien (0..1) i dla porównania stare (0..1)
+    const double utilPerWindow = (activeSecsTotal > 0.0) ? (totalDuration / activeSecsTotal) : 0.0;
+    const double utilPerDay    = (simTime().dbl()   > 0.0) ? (totalDuration / simTime().dbl()) : 0.0;
+
+
+
     // Keep legacy field in sync so downstream code / scalars remain valid
     totalPacketsDelivered = static_cast<int>(deliveredEndToEnd);
+    const int simDays_local  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
 
     totalPacketsTransmitted = totalPacketsTransmittedUL + totalPacketsTransmittedDL;
+
+    int rejoinCount = 0;
+    for (size_t i = 0; i < radioDevices.size(); ++i) {
+        rejoinCount += radioDevices[i].offlineCount;
+    }
+
 
     if (outFile.is_open()) {
         outFile << std::fixed << std::setprecision(2);
@@ -452,7 +478,8 @@ void Keeper::recordResultsToFile()
         outFile <<  "\n";
 
         outFile << "============== Results ================\n";
-        outFile << "Total utilisation = " << 100*totalDuration / simTime() << "[%]\n";
+        outFile << "Total utilisation = " << (utilPerWindow * 100.0) << "[%]\n";            //liczone tylko dla okien zgłoszeniowych
+        //outFile << "Total utilisation (per day)     = " << (utilPerDay    * 100.0) << "[%]\n";
         outFile <<  "\n";
         //outFile << "Daily read base: endnodes=" << endnodes << " days=" << simDays << " totalDeviceDays=" << totalDeviceDays << "\n";
 
@@ -496,15 +523,14 @@ void Keeper::recordResultsToFile()
         //outFile << "Devices online avg = " << endnodeStatusVector.getMean() << "\n";
         //outFile << "Devices online min = " << endnodeStatusVector.getMin() << "\n";
 
-        outFile << "Devices re-join count = " << offlineTime.getCount()-endnodes << "\n";           //-endnodes ze względu na 1 laczenie
+        outFile << "Devices re-join count = " << rejoinCount << "\n";           //-endnodes ze względu na 1 laczenie
         outFile << "Devices offline longest = " << offlineTime.getMax() << "[s]\n";
         outFile << "Devices offline avg = " << offlineTime.getMean() << "[s]\n";
         outFile <<  "\n";
 
-        outFile << "Endnode consumption max [mAh] = " << energyConsumption.getMax()/3600 << "\n";
-        outFile << "Endnode consumption avg [mAh] = " << energyConsumption.getMean()/3600 << "\n";
-        outFile << "Endnode consumption min [mAh] = " << energyConsumption.getMin()/3600 << "\n";
-        outFile << "Endnode consumption Relay [mAh] = " << energyConsumptionRelay/3600 << "\n";
+        outFile << "Endnode offset current max [uAh] = " << 1000*energyConsumption.getMax()/(simDays_local*24) << "\n";
+        outFile << "Endnode offset current min [uAh] = " << 1000*energyConsumption.getMin()/(simDays_local*24) << "\n";
+        outFile << "Endnode offset current Relay [uAh] = " << 1000*energyConsumptionRelay/(simDays_local*24) << "\n";
 
         outFile << "--------------------------\n";
 
@@ -522,10 +548,9 @@ void Keeper::recordResultsToFile()
         topoFile << "\n";
 
         const int endnodes_local = countEndnodes();
-        const int simDays_local  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
 
         topoFile << "ED             = " << endnodes_local << "\n";
-        topoFile << "Simulated days = " << simDays_local  << "\n";
+        topoFile << "Simulated days = " << simDays  << "\n";
         topoFile << "idx,x,y,avg_daily_success_UL[%]\n";
 
         for (size_t i = 0; i < radioDevices.size(); ++i) {
@@ -535,13 +560,13 @@ void Keeper::recordResultsToFile()
             const int devIdx = static_cast<int>(i);
 
             int successDaysUL = 0;
-            for (int d = 0; d < simDays_local; ++d) {
+            for (int d = 0; d < simDays; ++d) {
                 const uint64_t key = makeDevDayKey(devIdx, d);
                 if (dailyReadDeviceDayUL_.find(key) != dailyReadDeviceDayUL_.end())
                     ++successDaysUL;
             }
-            const double avgUL = (simDays_local > 0)
-                ? 100.0 * (double)successDaysUL / (double)simDays_local : 0.0;
+            const double avgUL = (simDays > 0)
+                ? 100.0 * (double)successDaysUL / (double)simDays : 0.0;
 
             double x = 0.0, y = 0.0;
             if (radioDevices[i].radio) {

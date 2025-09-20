@@ -1,4 +1,4 @@
-//
+    //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -59,11 +59,19 @@ class LNS : public omnetpp::cSimpleModule
         LoRaPacket* representative = nullptr; // jeden egzemplarz UL do przetworzenia
         std::vector<Rec> receptions;          // lista kopii: (wejście, RSSI)
     };
+    struct ReceivedFrame {
+        double x;             // senderPositionX
+        double y;             // senderPositionY
+        short  sf;            // spreadingFactor
+        double rssi;          // LoRaPacket::rssi
+        double rssi_margin;   // LoRaPacket::rssi_margin
+    };
     // 64-bitowy klucz: (devIdx << 32) ^ pktId
     static inline long long makeKey(long devIdx, long pktId) {
         return ( (static_cast<long long>(devIdx) << 32) ^ (static_cast<unsigned long long>(pktId) & 0xFFFFFFFFull) );
     }
     std::unordered_map<long long, DedupEntry> dedup;
+    std::vector<ReceivedFrame> receivedFrames;
 
     enum { KIND_DEDUP_TIMER = 0x0DB1 };
 

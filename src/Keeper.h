@@ -45,6 +45,7 @@ struct Node
     double offlinePercentage;
     double energyConsumption;
     Radio *radio = nullptr;
+    int offlineCount = 0;
 };
 
 struct PeriodicStats{

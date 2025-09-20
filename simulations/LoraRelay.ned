@@ -40,6 +40,7 @@ network LoraRelay
 		int framesPerWindowMin = default(1);
 		int framesPerWindowMax = default(1);
 		int transmittingWindowDuration1 = default(180);
+		int transmittingWindowDuration2 = default(180);
         double R  = 350;
 
         @display("bgb=1000,900");
