@@ -15,6 +15,7 @@
 
 #include "Radio.h"
 #include "LoRaPacket.h"
+#include <limits>
 
 namespace opp_lora_relay_official {
 
@@ -132,6 +133,7 @@ void Radio::initialize()
 
 
     wakeupRelay = registerSignal("wakeupRelay");
+    relayListeningUntil = SIMTIME_ZERO;
     lastSpreadingFactor = 12;
 
     if(deviceType == DevType::RELAY)
@@ -231,6 +233,8 @@ void Radio::handleMessage(cMessage *msg)
                 if (sendQueue.size() > 0) {
                     sendToNetwork(NULL);
                 }
+                if (msg != radioRXTimer)
+                    delete msg;
                 break;
 
             //Below case indicate that the message was correctly received. No disruption during transmission.
@@ -303,13 +307,16 @@ void Radio::receiveSignal(cComponent *src, simsignal_t id, double value, cObject
 {
     if (id == wakeupRelay && deviceType == DevType::RELAY && retransmissionModel == RetransmissionModel::EP431)
     {
-        // TODO - check closest relay
+        Enter_Method("receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)");
+        const simtime_t listenUntil = simTime() + value;
+        if (listenUntil > relayListeningUntil)
+            relayListeningUntil = listenUntil;
+        scheduleAt(listenUntil, new cMessage("Relay listen timeout", SelfMsgType::RXR));
+
         if ((radioActivity != RadioActivity::RECEIVING) and (radioActivity != RadioActivity::TRANSMITTING))
         {
-            Enter_Method("receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)");
             updateRadioActivity(RadioActivity::LISTENING);
             getParentModule()->getDisplayString().setTagArg("t",0,"Listening rly");               //unable to execute gui command (wrong thered?)
-            scheduleAt(simTime() + value, new cMessage("Relay required", SelfMsgType::RXR));
             EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "RL enabled to listen for ED\n";
         }
     }
@@ -341,8 +348,14 @@ void Radio::updateRadio()
                 }
                 if (retransmissionModel == EP431)
                 {
-                    updateRadioActivity(RadioActivity::RADIOOFF);
-                    getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
+                    if (simTime() < relayListeningUntil) {
+                        updateRadioActivity(RadioActivity::LISTENING);
+                        getParentModule()->getDisplayString().setTagArg("t",0,"Listening rly");
+                    }
+                    else {
+                        updateRadioActivity(RadioActivity::RADIOOFF);
+                        getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
+                    }
                 }
             }
             break;
@@ -384,6 +397,41 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     if (msg->senderId != myKeeperIndex && deviceType == DevType::ENDNODE)
         return;
 
+    const bool relayAccessUplink =
+            deviceType == DevType::RELAY && msg->isUplink && msg->relayRequired && !msg->isRelayed;
+    const bool relayAccessDownlink =
+            deviceType == DevType::ENDNODE && !msg->isUplink && msg->isRelayed;
+    const bool relayBackhaulUplink =
+            deviceType == DevType::GATEWAY && msg->isUplink && msg->isRelayed;
+    const bool relayBackhaulDownlink =
+            deviceType == DevType::RELAY && !msg->isUplink && msg->relayRequired;
+    const bool relayAccessLink = relayAccessUplink || relayAccessDownlink;
+    const bool reliableRelayBackhaul = relayBackhaulUplink || relayBackhaulDownlink;
+
+    // All scheduled EP431 relays open the planned receive slot, which is
+    // relevant to their energy budget. Only the relay selected by proximity
+    // accepts and forwards the frame, matching the LNS assignment assumption
+    // and preventing duplicate retransmissions.
+    if (relayAccessUplink) {
+        Radio *closestRelay = nullptr;
+        double closestDistanceSquared = std::numeric_limits<double>::max();
+        for (const Node& node : keeper->returnRadioDevices()) {
+            if (node.devType != DevType::RELAY || node.radio == nullptr)
+                continue;
+            const double dx = node.radio->position.x - msg->senderPositionX;
+            const double dy = node.radio->position.y - msg->senderPositionY;
+            const double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared < closestDistanceSquared) {
+                closestDistanceSquared = distanceSquared;
+                closestRelay = node.radio;
+            }
+        }
+        if (closestRelay != this) {
+            delete msg;
+            return;
+        }
+    }
+
     //verify colisions with transmission:
     if (radioActivity == RadioActivity::TRANSMITTING)              //for gateway colistion is not possible
     {
@@ -394,6 +442,10 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
         return;
     }
 
+    // The thesis assumes that a relay is installed in LOS conditions. The
+    // ED<->RL access link therefore has a 10 dB installation advantage, while
+    // propagation losses on the RL<->GW backhaul are deliberately omitted.
+    // Packet collisions are still handled by the normal receiver logic below.
     //calc RSS based on distance from transmitter
     rssi = getRssi((LoRaPacket*)msg);
 
@@ -403,6 +455,16 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     //apply random variation based on signal observation
     double currentPL = normal(0, par("pathlosStd"));
     rssi += currentPL;
+
+    const double relayLinkMarginDb = par("relayLinkMarginDb").doubleValue();
+    if (relayAccessLink)
+        rssi += relayLinkMarginDb;
+
+    // Chapter 6 explicitly excludes RL-GW link loss from the model. Keep a
+    // deterministic positive margin instead of letting distance/path-loss
+    // reject a relayed frame. Interference/capture can still reject it.
+    if (reliableRelayBackhaul)
+        rssi = std::max(rssi, realSensitivity + relayLinkMarginDb);
 
     msg->rssi = rssi;
     msg->rssi_margin = rssi - realSensitivity;
@@ -560,7 +622,7 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
 
         getParentModule()->getDisplayString().setTagArg("r",0,"200");
     }
-    for (Node &device : keeper->returnRadioDevices()) // access by reference to avoid copying
+    for (const Node &device : keeper->returnRadioDevices())
     {
 
         //cModule *target = getParentModule()->getParentModule()->getSubmodule(device.name.c_str(), device.index);
@@ -706,7 +768,7 @@ void Radio::finish()
     recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
 }
 
-static inline double readCoord(cModule* m, const char* name, int tagIndex) {
+double Radio::readCoord(cModule* m, const char* name, int tagIndex) {
     if (m->hasPar(name))               // preferuj parametry
         return m->par(name).doubleValue();
     // fallback: spróbuj display string "p"

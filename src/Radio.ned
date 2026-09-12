@@ -29,6 +29,7 @@ simple Radio
         double attenuation = uniform(0,20);
         double pathlosStd;
         double sensitivityAllRadios;
+        double relayLinkMarginDb = default(10); // LOS installation advantage for relay links
 
         int listeningWindowStart1;
         int listeningWindowStart2;

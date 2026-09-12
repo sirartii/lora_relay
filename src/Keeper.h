@@ -64,7 +64,8 @@ public:
     int registerMe(std::string name, int index, DevType devTyp, Radio* radio);
     int registerEndnode();
 
-    std::vector<Node> returnRadioDevices();
+    const std::vector<Node>& returnRadioDevices() const;
+    bool hasRelayPath() const;
     void updateEndnodeState(int index, EndDeviceState status);
     void recordFrameTransmission(int NodeFrom, double msgDuration);
     void recordFrameReception(int NodeFrom, int nodeTo, float RSSI, bool reveived);
@@ -125,12 +126,15 @@ public:
     static inline int dayIndex(const omnetpp::simtime_t& t) {
         return (int)(t.inUnit(SIMTIME_S) / 86400); // full days since t=0
     }
+    bool isCollectingStatistics() const;
+    int firstStatisticsDay() const;
     // UL
-    std::unordered_set<long long> ulCollided_;   // było co najmniej jedno odrzucenie UL z powodu kolizji
-    std::unordered_set<long long> ulDelivered_;  // LNS odebrał UL (recordMessageReception)
+    std::unordered_set<uint64_t> ulTransmitted_; // pakiety UL nadane po okresie inicjalizacji
+    std::unordered_set<uint64_t> ulCollided_;    // było co najmniej jedno odrzucenie UL z powodu kolizji
+    std::unordered_set<uint64_t> ulDelivered_;   // LNS odebrał UL (recordMessageReception)
     // DL
-    std::unordered_set<long long> dlCollided_;   // EndDevice odrzucił DL z powodu kolizji
-    std::unordered_set<long long> dlDelivered_;  // EndDevice odebrał DL (ACK/JOIN ACCEPT)
+    std::unordered_set<uint64_t> dlCollided_;    // EndDevice odrzucił DL z powodu kolizji
+    std::unordered_set<uint64_t> dlDelivered_;   // EndDevice odebrał DL (ACK/JOIN ACCEPT)
 
     std::unordered_map<uint64_t, int> ulDeliveredDay_;
     std::unordered_set<uint64_t> dailyDeviceDaySuccess_;

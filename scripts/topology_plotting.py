@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+import statistics
 
 import matplotlib
 
@@ -23,6 +24,42 @@ ROLE_STYLE = {
     "RELAY": {"marker": "s", "color": "#ff7f0e", "label": "Relay", "size": 105},
     "IPB": {"marker": "D", "color": "#1f77b4", "label": "LoRa→IP", "size": 105},
 }
+
+
+def add_success_statistics(ax: Axes, devices: Sequence[EndDevice]) -> None:
+    """Add the mean/median/quartile labels used in the thesis figures."""
+
+    values = [node.daily_success_percent for node in devices]
+    if not values:
+        return
+    if len(values) == 1:
+        q1 = q3 = values[0]
+    else:
+        q1, _, q3 = statistics.quantiles(values, n=4, method="inclusive")
+    labels = (
+        f"Śr: {statistics.fmean(values):.2f}%",
+        f"Me: {statistics.median(values):.2f}%",
+        f"Q1: {q1:.2f}%",
+        f"Q3: {q3:.2f}%",
+    )
+    for index, label in enumerate(labels):
+        ax.text(
+            0.02,
+            0.98 - index * 0.072,
+            label,
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=9,
+            color="#666666",
+            bbox={
+                "boxstyle": "round,pad=0.22",
+                "facecolor": "#f7f7f7",
+                "edgecolor": "#c8c8c8",
+                "alpha": 0.96,
+            },
+            zorder=7,
+        )
 
 
 def configure_style() -> None:
@@ -105,6 +142,7 @@ def draw_topology(
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
     ax.set_aspect("equal", adjustable="box")
+    add_success_statistics(ax, devices)
     if used_labels:
         ax.legend(title="Stałe węzły", loc="best", framealpha=0.92)
     return scatter

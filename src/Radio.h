@@ -119,6 +119,7 @@ protected:
     double energyConsumptionWOR;
 
     simsignal_t wakeupRelay;
+    simtime_t relayListeningUntil;
     simtime_t lastRadioActivityChange;
     cMessage *radioUpdateReceive;
 

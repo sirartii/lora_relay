@@ -117,6 +117,7 @@ void LogicEndnode::initialize()
         missedResponse = 0;
         packetCounter = 0;
         MsgAfterWOR = 0;
+        lastACKTime = simTime();
 
         WATCH(lastACK);
         WATCH(packetCounter);
@@ -136,20 +137,28 @@ void LogicEndnode::handleMessage(cMessage *msg)
         // wejdziemy tu tylko, gdy oczekiwaliśmy odpowiedzi i minął timeout
         if (msg->getKind() == SelfMsgType::RXTIMER)
         {
-            if (!waitingResponse)
+            if (!waitingResponse) {
+                delete msg;
                 return;
+            }
 
             waitingResponse = 0;
             missedResponse++;
 
-            if (missedResponse > 5)
+            const int missedLimit = std::max(
+                1, static_cast<int>(par("missedPacketsToSearchRelay").intValue())
+            );
+            if (missedResponse >= missedLimit)
             {
                 missedResponse = 0;
-                //updateLogicalState(EndDeviceState::OFFLINE);
-                updateLogicalState(EndDeviceState::JOIN_RELAY);
+                lastACK = 0;
+                updateLogicalState(
+                    keeper->hasRelayPath() ? EndDeviceState::JOIN_RELAY : EndDeviceState::OFFLINE
+                );
             }
             cMessage* ra = new cMessage("ResetADR",MsgType::RESET_ADR);
             send(ra, "logicOut");
+            delete msg;
             return;
         }
 
@@ -317,9 +326,9 @@ void LogicEndnode::handleMessage(cMessage *msg)
         cModule *parent = getParentModule();
         LoRaPacket *job = new LoRaPacket(parent->getFullName(), 51);
 
-        job->id = packetCounter;
-        job->ackRequired = (packetCounter % 5) == 0 || lastACK > 0; // co 5-ta lub gdy poprzedni ACK nie dotarł
-        packetCounter++;
+        const int packetId = packetCounter++;
+        job->id = packetId;
+        job->ackRequired = (packetId % 5) == 0 || lastACK > 0; // co 5-ta lub gdy poprzedni ACK nie dotarł
 
         switch (endDeviceState){
 
@@ -331,11 +340,6 @@ void LogicEndnode::handleMessage(cMessage *msg)
                 job->relayRequired = false;
                 updateLogicalState(EndDeviceState::JOIN_DIRECT);
                 job->length = 15;
-                if (packetCounter > par("missedPacketsToSearchRelay").intValue())
-                {
-                    packetCounter = 0;
-                    updateLogicalState(EndDeviceState::JOIN_RELAY);
-                }
                 break;
 
             // TS011: WOR -> JOIN; EN038: pojedynczy JOIN_RELAY
@@ -360,6 +364,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
                         long long wsMs = (long long) llround(std::max(0.0, windowsize) * 1000.0);
                         scheduleAt(simTime() + SimTime(wsMs, SIMTIME_MS), rxWORMsg);
                         emit(wakeupRelay, windowsize*2, this);
+                        delete job;
                         return; // nie wysyłamy teraz ramki radiowej
                     }
                     else
@@ -382,12 +387,6 @@ void LogicEndnode::handleMessage(cMessage *msg)
                 if (job->ackRequired) job->setName("UPLINK_W_ACK");
                 else                  job->setName("UPLINK");
 
-                if (lastACK > par("missedPacketsToSearchRelay").intValue())
-                {
-                    updateLogicalState(EndDeviceState::OFFLINE);
-                    lastACK = 0;
-                    packetCounter = 0;
-                }
                 job->length = 51; // payload przykładowy
                 break;
 
@@ -399,12 +398,6 @@ void LogicEndnode::handleMessage(cMessage *msg)
                     if (job->ackRequired) job->setName("UPLINK_W_ACK");
                     else                  job->setName("UPLINK");
 
-                    if (lastACK > par("missedPacketsToSearchRelay").intValue())
-                    {
-                        updateLogicalState(EndDeviceState::OFFLINE);
-                        lastACK = 0;
-                        packetCounter = 0;
-                    }
                     job->length = 51;
                     MsgAfterWOR = 0;
                 }
@@ -419,6 +412,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
                         long long wsMs = (long long) llround(std::max(0.0, windowsize) * 1000.0);
                         scheduleAt(simTime() + SimTime(wsMs, SIMTIME_MS), rxWORMsg);
                         emit(wakeupRelay, windowsize*2, this);
+                        delete job;
                         return;
                     }
                     else
@@ -445,7 +439,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
         job->transmissionPower = 14;
         job->channel           = 1;   // TODO
         job->addPar("KeeperIndex") = myKeeperIndex;
-        job->addPar("PacketId")    = packetCounter;
+        job->addPar("PacketId")    = packetId;
 
         int sfParam = par("forceSF").intValue();
         if (endDeviceState == EndDeviceState::JOIN_RELAY ||
@@ -464,7 +458,7 @@ void LogicEndnode::handleMessage(cMessage *msg)
         job->isUplink = true;
 
         send(job, "logicOut");
-        keeper->recordMessageTransmission(myKeeperIndex, packetCounter, true);
+        keeper->recordMessageTransmission(myKeeperIndex, packetId, true);
 
         if (waitingResponse)
         {
@@ -473,6 +467,8 @@ void LogicEndnode::handleMessage(cMessage *msg)
             rxTimerMsg->setKind(SelfMsgType::RXTIMER);
             scheduleAt(simTime() + REPLAY_TIMEOUT, rxTimerMsg);
         }
+        if (msg->getKind() == SelfMsgType::TXREPEAT)
+            delete msg;
     }
     else {
         // Przetwarzanie DL

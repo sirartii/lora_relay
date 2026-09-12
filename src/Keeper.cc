@@ -23,6 +23,7 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>   // std::atof
 #include <ctime>     // std::time, std::ctime
 
@@ -32,16 +33,22 @@ Define_Module(Keeper);
 
 void Keeper::reportUplinkCollision(long devIdx, long pktId)
 {
-    ulCollided_.insert(makeKey(devIdx, pktId));
+    const uint64_t key = makeKey(devIdx, pktId);
+    if (isCollectingStatistics() && ulTransmitted_.find(key) != ulTransmitted_.end())
+        ulCollided_.insert(key);
 }
 
 void Keeper::reportDownlinkCollision(long devIdx, long pktId)
 {
-    dlCollided_.insert(makeKey(devIdx, pktId));
+    if (isCollectingStatistics())
+        dlCollided_.insert(makeKey(devIdx, pktId));
 }
 
 void Keeper::recordDownlinkReception(long devIdx, long pktId)
 {
+    if (!isCollectingStatistics())
+        return;
+
     const uint64_t key = makeKey(devIdx, pktId);
     if (dlDelivered_.insert(key).second) {
         auto it = ulDeliveredDay_.find(key);
@@ -119,9 +126,29 @@ int Keeper::registerEndnode()
     return noInitializedEndnodes-1;
 }
 
-std::vector<Node> Keeper::returnRadioDevices()
+const std::vector<Node>& Keeper::returnRadioDevices() const
 {
    return radioDevices;
+}
+
+bool Keeper::hasRelayPath() const
+{
+    for (const Node& node : radioDevices) {
+        if (node.devType == DevType::RELAY || node.devType == DevType::IPBRIDGE)
+            return true;
+    }
+    return false;
+}
+
+bool Keeper::isCollectingStatistics() const
+{
+    return simTime() >= getSimulation()->getWarmupPeriod();
+}
+
+int Keeper::firstStatisticsDay() const
+{
+    const double warmupSeconds = getSimulation()->getWarmupPeriod().dbl();
+    return std::max(0, (int)std::ceil(warmupSeconds / SECONDS_PER_DAY));
 }
 
 void Keeper::updateEndnodeState(int index, EndDeviceState status)
@@ -135,7 +162,8 @@ void Keeper::updateEndnodeState(int index, EndDeviceState status)
     if (status == EndDeviceState::OFFLINE)
     {
         radioDevices[index].lastOnline = simTime();
-        if (oldStatus == EndDeviceState::ONLINE_DIRECT || oldStatus == EndDeviceState::ONLINE_RELAYED)
+        if (isCollectingStatistics() &&
+            (oldStatus == EndDeviceState::ONLINE_DIRECT || oldStatus == EndDeviceState::ONLINE_RELAYED))
             radioDevices[index].offlineCount++;
     }
     if (status == EndDeviceState::ONLINE_DIRECT || status == EndDeviceState::ONLINE_RELAYED)
@@ -151,6 +179,9 @@ void Keeper::updateEndnodeState(int index, EndDeviceState status)
 
 void Keeper::recordFrameReception(int NodeFrom, int nodeTo, float RSSI, bool received)
 {
+    if (!isCollectingStatistics())
+        return;
+
     periodicStats.noPackets++;
 
     if (received)
@@ -164,13 +195,17 @@ void Keeper::recordFrameReception(int NodeFrom, int nodeTo, float RSSI, bool rec
 
 void Keeper::recordFrameTransmission(int NodeFrom, double msgDuration)
 {
+    if (!isCollectingStatistics())
+        return;
+
     packteSent++;
     totalDuration += msgDuration;
 }
 
 void Keeper::recordColision(int NodeFrom, int nodeTo)
 {
-    periodicStats.noCollisions++;
+    if (isCollectingStatistics())
+        periodicStats.noCollisions++;
 }
 
 void Keeper::recordEnergyConsumption(int Node, double consumption)
@@ -180,7 +215,8 @@ void Keeper::recordEnergyConsumption(int Node, double consumption)
 
 void Keeper::recordOfflineTime(int Node, double OfflineTime)
 {
-    offlineTime.collect(OfflineTime);
+    if (isCollectingStatistics())
+        offlineTime.collect(OfflineTime);
 }
 
 void Keeper::updateStats()
@@ -280,17 +316,28 @@ void Keeper::recordMessageTransmission(int NodeFrom, int PacketId, bool isUplink
         radioDevices[NodeFrom].lastPacketId = PacketId;
     }
 
-    totalPacketsTransmitted++;
-    if (isUplink)
-        totalPacketsTransmittedUL++;
-    else
+    if (!isCollectingStatistics())
+        return;
+
+    if (isUplink) {
+        const uint64_t key = makeKey(NodeFrom, PacketId);
+        if (ulTransmitted_.insert(key).second) {
+            totalPacketsTransmittedUL++;
+            totalPacketsTransmitted++;
+        }
+    }
+    else {
         totalPacketsTransmittedDL++;
+        totalPacketsTransmitted++;
+    }
 }
 
 void Keeper::recordMessageReception(long devIdx, long pktId)
 {
     // Zliczamy czas doręczenia UL tylko raz dla (devIdx,pktId)
     const uint64_t key = makeKey(devIdx, pktId);
+    if (!isCollectingStatistics() || ulTransmitted_.find(key) == ulTransmitted_.end())
+        return;
 
     if (ulDelivered_.insert(key).second)
     {
@@ -314,8 +361,8 @@ void Keeper::recordMessageReception(long devIdx, long pktId)
 }
 
 // Pomocnicza różnica zbiorów: A \ B
-static long diffCount(const std::unordered_set<long long>& A,
-                      const std::unordered_set<long long>& B)
+static long diffCount(const std::unordered_set<uint64_t>& A,
+                      const std::unordered_set<uint64_t>& B)
 {
     long cnt = 0;
     for (const auto& k : A)
@@ -424,7 +471,9 @@ void Keeper::recordResultsToFile()
     // Daily read success
     int endnodes = countEndnodes();
     int simDays  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
-    long long totalDeviceDays      = 1LL * endnodes * simDays;
+    const int warmupDays = firstStatisticsDay();
+    const int statisticsDays = std::max(0, simDays - warmupDays);
+    long long totalDeviceDays = 1LL * endnodes * statisticsDays;
 
     const long long successfulUL = (long long)dailyReadDeviceDayUL_.size();
     const double dailyUL = (totalDeviceDays > 0)
@@ -442,7 +491,7 @@ void Keeper::recordResultsToFile()
 
     // sekundy aktywne (na dobę i łącznie w symulacji)
     const double activeSecsPerDay  = (std::max(0.0, win1_min) + std::max(0.0, win2_min)) * 60.0;
-    const double activeSecsTotal   = activeSecsPerDay * simDays;
+    const double activeSecsTotal   = activeSecsPerDay * statisticsDays;
 
     // wykorzystanie względem okien (0..1) i dla porównania stare (0..1)
     const double utilPerWindow = (activeSecsTotal > 0.0) ? (totalDuration / activeSecsTotal) : 0.0;
@@ -473,6 +522,8 @@ void Keeper::recordResultsToFile()
         outFile << "Distortion     = " << par("enableKeeperDistortion").str() << "\n";
         outFile << "Max miss       = " << par("missedPacketsToSearchRelay").str() << "\n";
         outFile << "Simulated days = " << simDays << "\n";
+        outFile << "Warmup days    = " << warmupDays << "\n";
+        outFile << "Statistics days= " << statisticsDays << "\n";
         outFile << "Window len [h] = " << getSimulation()->getSystemModule()->par("transmittingWindowDuration1").str() << "\n";
         outFile << "Frames / window= " << getSimulation()->getSystemModule()->par("framesPerWindowMin").str() << "\n";
         outFile <<  "\n";
@@ -560,13 +611,13 @@ void Keeper::recordResultsToFile()
             const int devIdx = static_cast<int>(i);
 
             int successDaysUL = 0;
-            for (int d = 0; d < simDays; ++d) {
+            for (int d = warmupDays; d < simDays; ++d) {
                 const uint64_t key = makeDevDayKey(devIdx, d);
                 if (dailyReadDeviceDayUL_.find(key) != dailyReadDeviceDayUL_.end())
                     ++successDaysUL;
             }
-            const double avgUL = (simDays > 0)
-                ? 100.0 * (double)successDaysUL / (double)simDays : 0.0;
+            const double avgUL = (statisticsDays > 0)
+                ? 100.0 * (double)successDaysUL / (double)statisticsDays : 0.0;
 
             double x = 0.0, y = 0.0;
             if (radioDevices[i].radio) {

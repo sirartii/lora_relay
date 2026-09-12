@@ -52,7 +52,7 @@ private:
 
 
     //unsigned char packetCounter;
-    unsigned char lastACK;
+    int lastACK;
     unsigned char waitingResponse;
     int missedResponse;
     Keeper *keeper;
