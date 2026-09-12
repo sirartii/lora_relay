@@ -408,6 +408,8 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
             deviceType == DevType::GATEWAY && msg->isUplink && msg->isRelayed;
     const bool relayBackhaulDownlink =
             deviceType == DevType::RELAY && !msg->isUplink && msg->relayRequired;
+    const bool ipBridgeAccessUplink =
+            deviceType == DevType::IPBRIDGE && msg->isUplink && msg->relayRequired;
     const bool relayAccessLink = relayAccessUplink || relayAccessDownlink;
     const bool reliableRelayBackhaul = relayBackhaulUplink || relayBackhaulDownlink;
 
@@ -462,6 +464,11 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     const double relayLinkMarginDb = par("relayLinkMarginDb").doubleValue();
     if (relayAccessLink)
         rssi += relayLinkMarginDb;
+
+    // The reconstructed LoRa-to-LTE scenario used a +50 dB LOS advantage as
+    // a practical equivalent of a lossless access link.
+    if (ipBridgeAccessUplink)
+        rssi += par("ipBridgeLinkMarginDb").doubleValue();
 
     // Chapter 6 explicitly excludes RL-GW link loss from the model. Keep a
     // deterministic positive margin instead of letting distance/path-loss

@@ -30,6 +30,7 @@ simple Radio
         double pathlosStd;
         double sensitivityAllRadios;
         double relayLinkMarginDb = default(10); // LOS installation advantage for relay links
+        double ipBridgeLinkMarginDb = default(50); // lossless LoRa-LTE approximation
 
         int listeningWindowStart1;
         int listeningWindowStart2;

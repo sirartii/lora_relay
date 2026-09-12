@@ -357,7 +357,7 @@ def energy_from_scalar(path: Path, simulated_days: int) -> tuple[float | None, f
         for name, value in totals.items()
         if name.startswith("relay") or name.startswith("ipbridge")
     ]
-    return (statistics.fmean(ed) if ed else None, max(relay) if relay else None)
+    return (statistics.fmean(ed) if ed else None, statistics.fmean(relay) if relay else None)
 
 
 def find_scalar_files(destination: Path) -> list[Path]:
@@ -398,13 +398,13 @@ def collect_metrics(destination: Path) -> tuple[list[dict[str, int | float | Non
     for index, record in enumerate(records):
         record["run"] = index
         record["ed_current_uA"] = None
-        record["relay_max_current_uA"] = None
+        record["relay_current_uA"] = None
         if index < len(scalar_files):
             ed_current, relay_current = energy_from_scalar(
                 scalar_files[index], int(record.get("simulated_days", 30))
             )
             record["ed_current_uA"] = ed_current
-            record["relay_max_current_uA"] = relay_current
+            record["relay_current_uA"] = relay_current
 
     fields = [
         "run",
@@ -420,7 +420,7 @@ def collect_metrics(destination: Path) -> tuple[list[dict[str, int | float | Non
         "packets_transmitted_ul",
         "packets_delivered_ul",
         "ed_current_uA",
-        "relay_max_current_uA",
+        "relay_current_uA",
     ]
     with (destination / "metrics_runs.csv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
@@ -435,7 +435,7 @@ def collect_metrics(destination: Path) -> tuple[list[dict[str, int | float | Non
         "collisions",
         "rejoins",
         "ed_current_uA",
-        "relay_max_current_uA",
+        "relay_current_uA",
     ):
         values = [float(record[field]) for record in records if record.get(field) is not None]
         if values:
@@ -827,7 +827,7 @@ def write_chapter_summary(output: Path, completed: Sequence[tuple[Scenario, dict
     for scenario, summary in completed:
         daily = summary.get("daily_success_percent", {})
         ed = summary.get("ed_current_uA", {})
-        relay = summary.get("relay_max_current_uA", {})
+        relay = summary.get("relay_current_uA", {})
         daily_mean = daily.get("mean") if isinstance(daily, dict) else None
         ed_mean = ed.get("mean") if isinstance(ed, dict) else None
         relay_mean = relay.get("mean") if isinstance(relay, dict) else None
@@ -848,7 +848,7 @@ def write_chapter_summary(output: Path, completed: Sequence[tuple[Scenario, dict
                 "published_ed_current_uA": scenario.published_ed_current,
                 "simulated_ed_current_uA": ed_mean,
                 "published_relay_current_uA": scenario.published_relay_current,
-                "simulated_relay_max_current_uA": relay_mean,
+                "simulated_relay_current_uA": relay_mean,
             }
         )
     path = output / "chapter7_summary.csv"
@@ -894,6 +894,13 @@ def write_readme(args: argparse.Namespace, generated: Sequence[Path]) -> None:
             "powtórzona w rozdziale 7 jest objęta erratą.",
             "- Do bilansu każdego RL dodano jawny, stały składnik kalibracyjny 3 µA; "
             "nie zmienia on modelu radiowego ani wyników skuteczności.",
+            "- Prąd WOR przekaźnika TS011 wynosi 70 µA, zgodnie z pierwotną konfiguracją; "
+            "wartość 0.89 mA dotyczy innego poziomu opisu pracy układu i nie może być "
+            "naliczana przez cały stan WOR.",
+            "- Prąd RL w podsumowaniach jest średnią po wszystkich przekaźnikach w danym przebiegu, "
+            "a następnie średnią z powtórzeń.",
+            "- Łącze dostępowe LoRa–LTE wykorzystuje premię LOS 50 dB, zgodnie z "
+            "pierwotnym przybliżeniem łącza bezstratnego.",
             "",
         ]
     )
