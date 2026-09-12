@@ -118,7 +118,8 @@ INTEGER_METRICS = {
     "rejoins",
 }
 SCALAR_ENERGY_RE = re.compile(
-    r'^scalar\s+(?P<path>\S+)\s+"Energy consumption total (?:Tx|Rx|Idle|WOR)"\s+(?P<value>[-+0-9.eE]+)$'
+    r'^scalar\s+(?P<path>\S+)\s+"Energy consumption total '
+    r'(?:Tx|Rx|Idle|WOR|BaseOffset)"\s+(?P<value>[-+0-9.eE]+)$'
 )
 
 
@@ -891,6 +892,8 @@ def write_readme(args: argparse.Namespace, generated: Sequence[Path]) -> None:
             "energia jest raportowana dla całego horyzontu symulacji.",
             "- Domyślnie użyto poprawnej wartości 4.6 mA dla RX. Wartość 4.9 mA "
             "powtórzona w rozdziale 7 jest objęta erratą.",
+            "- Do bilansu każdego RL dodano jawny, stały składnik kalibracyjny 3 µA; "
+            "nie zmienia on modelu radiowego ani wyników skuteczności.",
             "",
         ]
     )

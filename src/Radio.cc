@@ -90,11 +90,13 @@ void Radio::initialize()
     currentConsumptionTx = par("currentConsumptionTx").doubleValue();
     currentConsumptionIdle = par("currentConsumptionIdle").doubleValue();
     currentConsumptionWOR = par("currentConsumptionWOR").doubleValue();
+    currentConsumptionBaseOffset = par("currentConsumptionBaseOffset").doubleValue();
 
     energyConsumptionRx = 0;
     energyConsumptionTx = 0;
     energyConsumptionIdle = 0;
     energyConsumptionWOR = 0;
+    energyConsumptionBaseOffset = 0;
 
     collisionCount = 0;
 
@@ -124,6 +126,7 @@ void Radio::initialize()
     WATCH(energyConsumptionRx);
     WATCH(energyConsumptionTx);
     WATCH(energyConsumptionIdle);
+    WATCH(energyConsumptionBaseOffset);
     if (deviceType == DevType::RELAY)
         WATCH(energyConsumptionWOR);
 
@@ -711,6 +714,11 @@ void Radio::updateRadioActivity(RadioActivity::ra newRA)
 {
     double duration = (simTime() - lastRadioActivityChange).dbl();
 
+    // Optional always-on component kept separate from the measured sleep,
+    // receive and transmit currents. This makes an empirical calibration
+    // explicit in both the configuration and scalar results.
+    energyConsumptionBaseOffset += duration * currentConsumptionBaseOffset;
+
     switch (radioActivity)
     {
         case RadioActivity::UNKNOWN:    //first init only
@@ -740,7 +748,11 @@ void Radio::updateRadioActivity(RadioActivity::ra newRA)
     radioActivity = newRA;
     lastRadioActivityChange = simTime();
 
-    keeper->recordEnergyConsumption(myKeeperIndex, energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx + energyConsumptionWOR);
+    keeper->recordEnergyConsumption(
+        myKeeperIndex,
+        energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx +
+            energyConsumptionWOR + energyConsumptionBaseOffset
+    );
 }
 
 /*
@@ -762,10 +774,14 @@ bool Radio::isOffOrUnknown() const noexcept {
 
 void Radio::finish()
 {
+    // Account for the interval between the last state transition and the end
+    // of the simulation before writing energy scalars.
+    updateRadioActivity(radioActivity);
     recordScalar("Energy consumption total Tx", this->energyConsumptionTx);
     recordScalar("Energy consumption total Rx", this->energyConsumptionRx);
     recordScalar("Energy consumption total Idle", this->energyConsumptionIdle);
     recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
+    recordScalar("Energy consumption total BaseOffset", this->energyConsumptionBaseOffset);
 }
 
 double Radio::readCoord(cModule* m, const char* name, int tagIndex) {

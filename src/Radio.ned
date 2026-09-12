@@ -45,6 +45,7 @@ simple Radio
         double currentConsumptionTx;   //current consumption in TX mode [mA]
 		double currentConsumptionIdle; //current consumption in Idle mode [mA]
 		double currentConsumptionWOR;
+		double currentConsumptionBaseOffset = default(0); // continuous calibration component [mA]
 		
 
         double energyConsumption = default(0);
