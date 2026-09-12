@@ -119,7 +119,7 @@ INTEGER_METRICS = {
 }
 SCALAR_ENERGY_RE = re.compile(
     r'^scalar\s+(?P<path>\S+)\s+"Energy consumption total '
-    r'(?:Tx|Rx|Idle|WOR|BaseOffset)"\s+(?P<value>[-+0-9.eE]+)$'
+    r'(?:Tx|Rx|Idle|WOR|BaseOffset|LTE attach|LTE transmit)"\s+(?P<value>[-+0-9.eE]+)$'
 )
 
 
@@ -901,6 +901,14 @@ def write_readme(args: argparse.Namespace, generated: Sequence[Path]) -> None:
             "a następnie średnią z powtórzeń.",
             "- Łącze dostępowe LoRa–LTE wykorzystuje premię LOS 50 dB, zgodnie z "
             "pierwotnym przybliżeniem łącza bezstratnego.",
+            "- Odbiornik LoRa mostu LoRa–LTE pracuje w pseudolosowych slotach EP431, "
+            "a nie w ciągłym nasłuchu. Każda odebrana ramka uruchamia zestawianą na "
+            "żądanie sesję LTE Cat-M1.",
+            "- Rozdział 2.4.5 podaje osobne składniki E_attach i E_LTE_tx, lecz bez "
+            "ich wartości liczbowych. W konfiguracji zachowano oba liczniki, a ich "
+            "łączny koszt 1656 mA·s na transakcję skalibrowano do 135.12 µA z tabeli 7.1 "
+            "na podstawie średniej liczby zdarzeń z 30 powtórzeń; podział 1440/216 mA·s "
+            "jest założeniem rekonstrukcyjnym i nie jest wynikiem pomiaru.",
             "",
         ]
     )

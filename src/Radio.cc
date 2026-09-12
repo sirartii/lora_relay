@@ -91,17 +91,24 @@ void Radio::initialize()
     currentConsumptionIdle = par("currentConsumptionIdle").doubleValue();
     currentConsumptionWOR = par("currentConsumptionWOR").doubleValue();
     currentConsumptionBaseOffset = par("currentConsumptionBaseOffset").doubleValue();
+    lteAttachEnergyMAs = par("lteAttachEnergyMAs").doubleValue();
+    lteTransmitEnergyMAs = par("lteTransmitEnergyMAs").doubleValue();
 
     energyConsumptionRx = 0;
     energyConsumptionTx = 0;
     energyConsumptionIdle = 0;
     energyConsumptionWOR = 0;
     energyConsumptionBaseOffset = 0;
+    energyConsumptionLteAttach = 0;
+    energyConsumptionLteTransmit = 0;
+    lteAttachCount = 0;
+    lteTransmitCount = 0;
 
     collisionCount = 0;
 
     busyUntil = -1;
-    if (deviceType != DevType::GATEWAY && deviceType != DevType::RELAY) {
+    if (deviceType != DevType::GATEWAY && deviceType != DevType::RELAY &&
+            deviceType != DevType::IPBRIDGE) {
         timer_listeningWindowStart1 = new cMessage("listeningWindowStart1");
         timer_listeningWindowStart1->setKind(SelfMsgType::WINDOWTIMER);
         scheduleAt(simTime() + listeningWindowStart1 * 60, timer_listeningWindowStart1);
@@ -129,6 +136,12 @@ void Radio::initialize()
     WATCH(energyConsumptionBaseOffset);
     if (deviceType == DevType::RELAY)
         WATCH(energyConsumptionWOR);
+    if (deviceType == DevType::IPBRIDGE) {
+        WATCH(energyConsumptionLteAttach);
+        WATCH(energyConsumptionLteTransmit);
+        WATCH(lteAttachCount);
+        WATCH(lteTransmitCount);
+    }
 
     rssiOfCurrentReceive = sensitivity-1;
     currentRcvMessage = nullptr;
@@ -139,7 +152,7 @@ void Radio::initialize()
     relayListeningUntil = SIMTIME_ZERO;
     lastSpreadingFactor = 12;
 
-    if(deviceType == DevType::RELAY)
+    if(deviceType == DevType::RELAY || deviceType == DevType::IPBRIDGE)
         getSimulation()->getSystemModule()->subscribe("wakeupRelay", this);
 }
 void Radio::handleMessage(cMessage *msg)
@@ -243,6 +256,16 @@ void Radio::handleMessage(cMessage *msg)
             //Below case indicate that the message was correctly received. No disruption during transmission.
             case SelfMsgType::RXTIMER:
                 if (currentRcvMessage != nullptr){
+                    if (deviceType == DevType::IPBRIDGE && currentRcvMessage->isUplink &&
+                            currentRcvMessage->relayRequired) {
+                        // The thesis models LTE Cat-M1 as an on-demand session:
+                        // one attach followed by one IP uplink for every LoRa
+                        // frame actually received and forwarded by the bridge.
+                        energyConsumptionLteAttach += lteAttachEnergyMAs;
+                        energyConsumptionLteTransmit += lteTransmitEnergyMAs;
+                        lteAttachCount++;
+                        lteTransmitCount++;
+                    }
                     send(currentRcvMessage, "toLogic");
                     EV << "RADIO " << tmp_name << " t=" << simTime() << " rcv ok, sending to logic\n";
 
@@ -308,7 +331,9 @@ void Radio::handleMessage(cMessage *msg)
 }
 void Radio::receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)
 {
-    if (id == wakeupRelay && deviceType == DevType::RELAY && retransmissionModel == RetransmissionModel::EP431)
+    if (id == wakeupRelay &&
+            (deviceType == DevType::RELAY || deviceType == DevType::IPBRIDGE) &&
+            retransmissionModel == RetransmissionModel::EP431)
     {
         Enter_Method("receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)");
         const simtime_t listenUntil = simTime() + value;
@@ -380,9 +405,17 @@ void Radio::updateRadio()
             break;
 
         case DevType::IPBRIDGE:
-            updateRadioActivity(RadioActivity::LISTENING);
-            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "listening start" << "\n";
-            getParentModule()->getDisplayString().setTagArg("t",0,"Listening");
+            // The LoRa side of the LTE bridge uses the same predictable,
+            // pseudorandom receive slots as an EP431 relay. It must not keep
+            // the LoRa receiver listening continuously.
+            if (simTime() < relayListeningUntil) {
+                updateRadioActivity(RadioActivity::LISTENING);
+                getParentModule()->getDisplayString().setTagArg("t",0,"Listening IP");
+            }
+            else {
+                updateRadioActivity(RadioActivity::RADIOOFF);
+                getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
+            }
             break;
 
         case DevType::DEVUNKNOWN:
@@ -417,21 +450,22 @@ void Radio::receiveFromNetwork(LoRaPacket *msg)
     // relevant to their energy budget. Only the relay selected by proximity
     // accepts and forwards the frame, matching the LNS assignment assumption
     // and preventing duplicate retransmissions.
-    if (relayAccessUplink) {
-        Radio *closestRelay = nullptr;
+    if (relayAccessUplink || ipBridgeAccessUplink) {
+        const DevType receiverType = relayAccessUplink ? DevType::RELAY : DevType::IPBRIDGE;
+        Radio *closestReceiver = nullptr;
         double closestDistanceSquared = std::numeric_limits<double>::max();
         for (const Node& node : keeper->returnRadioDevices()) {
-            if (node.devType != DevType::RELAY || node.radio == nullptr)
+            if (node.devType != receiverType || node.radio == nullptr)
                 continue;
             const double dx = node.radio->position.x - msg->senderPositionX;
             const double dy = node.radio->position.y - msg->senderPositionY;
             const double distanceSquared = dx * dx + dy * dy;
             if (distanceSquared < closestDistanceSquared) {
                 closestDistanceSquared = distanceSquared;
-                closestRelay = node.radio;
+                closestReceiver = node.radio;
             }
         }
-        if (closestRelay != this) {
+        if (closestReceiver != this) {
             delete msg;
             return;
         }
@@ -758,7 +792,8 @@ void Radio::updateRadioActivity(RadioActivity::ra newRA)
     keeper->recordEnergyConsumption(
         myKeeperIndex,
         energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx +
-            energyConsumptionWOR + energyConsumptionBaseOffset
+            energyConsumptionWOR + energyConsumptionBaseOffset +
+            energyConsumptionLteAttach + energyConsumptionLteTransmit
     );
 }
 
@@ -789,6 +824,10 @@ void Radio::finish()
     recordScalar("Energy consumption total Idle", this->energyConsumptionIdle);
     recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
     recordScalar("Energy consumption total BaseOffset", this->energyConsumptionBaseOffset);
+    recordScalar("Energy consumption total LTE attach", this->energyConsumptionLteAttach);
+    recordScalar("Energy consumption total LTE transmit", this->energyConsumptionLteTransmit);
+    recordScalar("LTE attach count", this->lteAttachCount);
+    recordScalar("LTE transmit count", this->lteTransmitCount);
 }
 
 double Radio::readCoord(cModule* m, const char* name, int tagIndex) {

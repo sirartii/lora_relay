@@ -100,3 +100,6 @@ Przykład uruchomienia tylko dodatkowego scenariusza:
 
 Konfiguracja repozytorium używa 4,6 mA dla odbioru radiowego. Aby zastosować
 wartość 4,9 mA opisaną w rozdziale 7.1, dodaj `--rx-current-ma 4.9`.
+
+Model energetyczny mostu LoRa–LTE, jego brakujące parametry źródłowe oraz
+kalibrację do tabeli 7.1 opisano w `docs/LTE_RECONSTRUCTION.md`.

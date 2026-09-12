@@ -47,6 +47,8 @@ simple Radio
 		double currentConsumptionIdle; //current consumption in Idle mode [mA]
 		double currentConsumptionWOR;
 		double currentConsumptionBaseOffset = default(0); // continuous calibration component [mA]
+		double lteAttachEnergyMAs = default(0); // charge used by one on-demand LTE attach [mA*s]
+		double lteTransmitEnergyMAs = default(0); // charge used by one LTE uplink [mA*s]
 		
 
         double energyConsumption = default(0);

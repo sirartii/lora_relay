@@ -113,12 +113,18 @@ protected:
     double currentConsumptionIdle;
     double currentConsumptionWOR;
     double currentConsumptionBaseOffset;
+    double lteAttachEnergyMAs;
+    double lteTransmitEnergyMAs;
 
     double energyConsumptionRx;
     double energyConsumptionTx;
     double energyConsumptionIdle;
     double energyConsumptionWOR;
     double energyConsumptionBaseOffset;
+    double energyConsumptionLteAttach;
+    double energyConsumptionLteTransmit;
+    long lteAttachCount;
+    long lteTransmitCount;
 
     simsignal_t wakeupRelay;
     simtime_t relayListeningUntil;
