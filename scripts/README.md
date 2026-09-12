@@ -72,3 +72,31 @@ python -m pip install -r C:\Omnet\lora_relay\scripts\requirements.txt
 Opcja `--lenient` pomija każdy niedokończony lub uszkodzony blok i kontynuuje
 czytanie następnych przebiegów. Domyślnie parser działa rygorystycznie i zgłasza
 taki problem.
+
+## Pełny zestaw wyników rozdziału 7
+
+`generate_chapter7_results.py` jest skryptem głównym. Wykonuje 30 niezależnych
+powtórzeń każdego punktu, zachowuje tekstowe wyniki symulatora w osobnym folderze
+dla każdego scenariusza, oblicza podsumowania CSV/JSON i tworzy odpowiedniki
+rysunków 7.1, 7.2, 7.3, 7.5, 7.6, 7.7, 7.12 oraz 7.13.
+
+```powershell
+& $python C:\Omnet\lora_relay\scripts\generate_chapter7_results.py
+```
+
+Domyślny folder wyników to `C:\Omnet\simulation_results\chapter7`. Skrypt można
+wznawiać — pomija kompletne przebiegi. Podgląd planu bez uruchamiania symulatora:
+
+```powershell
+& $python C:\Omnet\lora_relay\scripts\generate_chapter7_results.py --list
+```
+
+Przykład uruchomienia tylko dodatkowego scenariusza:
+
+```powershell
+& $python C:\Omnet\lora_relay\scripts\generate_chapter7_results.py `
+  --sections table --scenarios t13
+```
+
+Konfiguracja repozytorium używa 4,6 mA dla odbioru radiowego. Aby zastosować
+wartość 4,9 mA opisaną w rozdziale 7.1, dodaj `--rx-current-ma 4.9`.
