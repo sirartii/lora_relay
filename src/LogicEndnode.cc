@@ -263,6 +263,8 @@ void LogicEndnode::sendTs011Wor(cMessage *event)
     wor->worChannel = channel;
     wor->uplinkChannel = ts011UplinkChannel;
     wor->worFrameCounter = worFrameCounter++;
+    wor->joinEui = 0x0102030405060708ULL;
+    wor->devEui = static_cast<unsigned int>(myKeeperIndex);
     wor->worValid = uniform(0, 1) <= ts011WorValidityProbability;
     if (!wor->worValid)
         ++invalidWorTransmitted;
@@ -327,6 +329,8 @@ void LogicEndnode::sendDataFrame(int packetId, bool join, bool ackRequired, bool
     packet->length = join ? (relayed ? RELAY_JOIN_LENGTH : 15) : applicationPayloadLength;
     packet->spreadingFactor = relayed ? ts011EndDeviceSpreadingFactor : forceSpreadingFactor;
     packet->channel = relayed ? ts011UplinkChannel : 1;
+    packet->joinEui = 0x0102030405060708ULL;
+    packet->devEui = static_cast<unsigned int>(myKeeperIndex);
     packet->addPar("KeeperIndex") = myKeeperIndex;
     packet->addPar("PacketId") = packetId;
     const bool expectResponse = packet->ackRequired;

@@ -4,6 +4,9 @@
 #include <omnetpp.h>
 
 #include <unordered_map>
+#include <array>
+#include <string>
+#include <vector>
 
 #include "common.h"
 
@@ -39,12 +42,20 @@ class LogicRelay : public omnetpp::cSimpleModule
         omnetpp::simtime_t receivedAt;
     };
 
+    struct JoinFilterRule {
+        bool forward = true;
+        int length = 0;
+        std::array<unsigned char, 16> prefix{};
+    };
+
     bool canForward(int deviceId, bool joinRequest, bool consume);
     int forwardingStatus(int deviceId);
     TokenBucket &deviceBucket(int deviceId);
     void handleWor(LoRaPacket *packet);
     void handleAccessUplink(LoRaPacket *packet);
     void handleForwardDownlink(LoRaPacket *packet);
+    void parseJoinFilterRules(const std::string &rules);
+    bool joinRequestAllowed(const LoRaPacket *packet) const;
 
     RetransmissionModel model = RetransmissionModel::UNKNOWN;
     double worAckDelay = 1;
@@ -67,6 +78,7 @@ class LogicRelay : public omnetpp::cSimpleModule
     TokenBucket globalBucket;
     std::unordered_map<int, TokenBucket> perDeviceBuckets;
     std::unordered_map<int, WorContext> worContexts;
+    std::vector<JoinFilterRule> joinFilterRules;
 
     long worReceived = 0;
     long worAcknowledged = 0;
@@ -74,6 +86,7 @@ class LogicRelay : public omnetpp::cSimpleModule
     long downlinksForwarded = 0;
     long forwardingLimitDrops = 0;
     long payloadLimitDrops = 0;
+    long joinFilterDrops = 0;
 };
 
 } // namespace opp_lora_relay_official

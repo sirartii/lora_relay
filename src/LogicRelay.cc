@@ -1,7 +1,9 @@
 #include "LogicRelay.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <sstream>
 
 #include "LoRaPacket.h"
 
@@ -68,6 +70,7 @@ void LogicRelay::initialize()
     rxrChannel = par("ts011RxrChannel").intValue();
     maximumForwardedPayload = par("ts011MaximumForwardedPayload").intValue();
     forwardingEnabled = par("ts011ForwardingEnabled").boolValue();
+    parseJoinFilterRules(par("ts011JoinFilterRules").stdstringValue());
 
     joinBucket.configure(par("ts011JoinReloadRate").doubleValue(),
                          par("ts011JoinBucketSize").doubleValue(), simTime());
@@ -94,6 +97,68 @@ void LogicRelay::initialize()
     WATCH(downlinksForwarded);
     WATCH(forwardingLimitDrops);
     WATCH(payloadLimitDrops);
+    WATCH(joinFilterDrops);
+}
+
+void LogicRelay::parseJoinFilterRules(const std::string &rules)
+{
+    std::stringstream input(rules);
+    std::string item;
+    while (std::getline(input, item, ',')) {
+        if (joinFilterRules.size() >= 16)
+            throw cRuntimeError("ts011JoinFilterRules supports at most 16 entries");
+        std::stringstream fields(item);
+        std::string action;
+        std::string lengthText;
+        std::string hex;
+        std::getline(fields, action, ':');
+        std::getline(fields, lengthText, ':');
+        std::getline(fields, hex);
+        std::transform(action.begin(), action.end(), action.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        JoinFilterRule rule;
+        if (action == "forward")
+            rule.forward = true;
+        else if (action == "filter")
+            rule.forward = false;
+        else
+            throw cRuntimeError("Join filter action must be 'forward' or 'filter'");
+        try {
+            rule.length = std::stoi(lengthText);
+        }
+        catch (...) {
+            throw cRuntimeError("Invalid Join filter prefix length");
+        }
+        if (rule.length < 0 || rule.length > 16 || static_cast<int>(hex.size()) != rule.length * 2)
+            throw cRuntimeError("Join filter prefix must contain exactly lengthBytes*2 hex digits");
+        for (int i = 0; i < rule.length; ++i) {
+            try {
+                rule.prefix[i] = static_cast<unsigned char>(std::stoul(hex.substr(i * 2, 2), nullptr, 16));
+            }
+            catch (...) {
+                throw cRuntimeError("Invalid hexadecimal Join filter prefix");
+            }
+        }
+        joinFilterRules.push_back(rule);
+    }
+}
+
+bool LogicRelay::joinRequestAllowed(const LoRaPacket *packet) const
+{
+    std::array<unsigned char, 16> key{};
+    for (int i = 0; i < 8; ++i) {
+        key[i] = static_cast<unsigned char>((packet->joinEui >> (8 * i)) & 0xff);
+        key[8 + i] = static_cast<unsigned char>((packet->devEui >> (8 * i)) & 0xff);
+    }
+    bool decision = true;
+    int longest = -1;
+    for (const auto &rule : joinFilterRules) {
+        if (rule.length < longest || !std::equal(rule.prefix.begin(), rule.prefix.begin() + rule.length, key.begin()))
+            continue;
+        longest = rule.length;
+        decision = rule.forward;
+    }
+    return decision;
 }
 
 LogicRelay::TokenBucket &LogicRelay::deviceBucket(int deviceId)
@@ -184,6 +249,12 @@ void LogicRelay::handleAccessUplink(LoRaPacket *packet)
         packet->addPar("OriginalUplinkEnd") = simTime().dbl();
         scheduleAt(simTime(), packet);
         ++uplinksForwarded;
+        return;
+    }
+
+    if (join && !joinRequestAllowed(packet)) {
+        ++joinFilterDrops;
+        delete packet;
         return;
     }
 
@@ -295,6 +366,7 @@ void LogicRelay::finish()
     recordScalar("TS011 downlinks forwarded", downlinksForwarded);
     recordScalar("TS011 forwarding-limit drops", forwardingLimitDrops);
     recordScalar("TS011 payload-limit drops", payloadLimitDrops);
+    recordScalar("TS011 Join-Request filter drops", joinFilterDrops);
 }
 
 } // namespace opp_lora_relay_official

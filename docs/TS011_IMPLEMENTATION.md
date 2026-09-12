@@ -18,14 +18,15 @@ comparative TS011 versus EP431 study. The normative source is
 | Forwarding timing (8.2) | The relay transmits the encapsulated uplink exactly `ts011RelayForwardDelay` after completing access-link reception. The original uplink end time is retained for RXR and network-time correction. |
 | Payload limits (8.3, 8.5) | The application payload stays fixed. Only TS011 encapsulation changes frame size. Frames exceeding `ts011MaximumForwardedPayload` are discarded. |
 | Downlink encapsulation (8.4, 9.2) | ForwardDownlinkReq is accepted only on FPort 226 by the relay that originated the forwarded uplink, then decapsulated and transmitted in RXR. |
+| Join filtering (8.6) | Up to 16 static forward/filter rules use longest-prefix matching over the over-air JoinEUI+DevEUI byte sequence. Rules are configured with `ts011JoinFilterRules`. |
 | Forwarding limitations (8.8) | Join, per-device, aggregate trusted-device and global token buckets use hourly discrete reloads, configured sizes, no-limit mode, and forwarding status in WOR ACK. |
 | Single hop | A relay rejects already-relayed uplinks, preventing relay-to-relay forwarding. |
 
 WOR MIC/content validity is represented by `ts011WorValidityProbability`; the
 radio model does not execute AES because the simulator has no byte-level key or
 DevAddr session model. Successful validity represents the combined decrypt,
-content and MIC checks. Join filtering and all runtime Relay MAC command
-configuration are intentionally outside the requested scope.
+content and MIC checks. All runtime Relay MAC command configuration is
+intentionally outside the requested scope.
 
 ## Deliberate exclusions
 

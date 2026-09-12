@@ -17,6 +17,7 @@
 #define LORAPACKET_H_
 
 #include <omnetpp/cpacket.h>
+#include <cstdint>
 #include "common.h"
 
 namespace opp_lora_relay_official {
@@ -64,6 +65,8 @@ public:
 
     WorType worType;
     unsigned int worFrameCounter;
+    std::uint64_t joinEui;
+    std::uint64_t devEui;
     int preambleSymbols;
     int cadPeriodicityMs;
     int cadToRxSymbols;

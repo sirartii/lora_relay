@@ -16,6 +16,7 @@ simple LogicRelay
         int ts011RxrChannel = default(1);
         int ts011MaximumForwardedPayload = default(222);
         bool ts011ForwardingEnabled = default(true);
+        string ts011JoinFilterRules = default("forward:0:"); // action:lengthBytes:over-air hex, max 16 rules
 
         // A negative reload rate means "no limit". Buckets start with one
         // hour's reload-rate worth of tokens, as required by TS011.

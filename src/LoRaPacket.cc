@@ -27,6 +27,8 @@ LoRaPacket::LoRaPacket(LoRaPacket *other) : cMessage(*other)
     fPort = other->fPort;
     worType = other->worType;
     worFrameCounter = other->worFrameCounter;
+    joinEui = other->joinEui;
+    devEui = other->devEui;
     preambleSymbols = other->preambleSymbols;
     cadPeriodicityMs = other->cadPeriodicityMs;
     cadToRxSymbols = other->cadToRxSymbols;
@@ -70,6 +72,8 @@ LoRaPacket::LoRaPacket(const char *name, short kind) : cMessage(name, kind)
     fPort = 0;
     worType = WorType::CLASS_A_UPLINK;
     worFrameCounter = 0;
+    joinEui = 0x0102030405060708ULL;
+    devEui = 0;
     preambleSymbols = 0;
     cadPeriodicityMs = 1000;
     cadToRxSymbols = 8;
