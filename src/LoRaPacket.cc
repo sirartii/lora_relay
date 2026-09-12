@@ -1,246 +1,213 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "LoRaPacket.h"
-#include "common.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace opp_lora_relay_official {
 
-LoRaPacket::LoRaPacket() : cMessage()
+LoRaPacket::LoRaPacket() : LoRaPacket(nullptr, 0) {}
+
+LoRaPacket::LoRaPacket(LoRaPacket *other) : cMessage(*other)
 {
-    isUplink = false;
-    isRelayed = false;
-    relayRequired = false;
-    ackRequired = false;
-
-    //WATCH(isUplink);
-    //WATCH(isRelayed);
-    //WATCH(relayRequired);
-    //WATCH(ackRequired);
-
-    // TODO Auto-generated constructor stub
+    isUplink = other->isUplink;
+    isRelayed = other->isRelayed;
+    ackRequired = other->ackRequired;
+    relayRequired = other->relayRequired;
+    encapsulated = other->encapsulated;
+    worValid = other->worValid;
+    rxrEligible = other->rxrEligible;
+    id = other->id;
+    length = other->length;
+    channel = other->channel;
+    worChannel = other->worChannel;
+    uplinkChannel = other->uplinkChannel;
+    originalKind = other->originalKind;
+    originalLength = other->originalLength;
+    originalSpreadingFactor = other->originalSpreadingFactor;
+    fPort = other->fPort;
+    worType = other->worType;
+    worFrameCounter = other->worFrameCounter;
+    preambleSymbols = other->preambleSymbols;
+    cadPeriodicityMs = other->cadPeriodicityMs;
+    cadToRxSymbols = other->cadToRxSymbols;
+    relayClockAccuracyPpm = other->relayClockAccuracyPpm;
+    tOffsetMs = other->tOffsetMs;
+    forwardStatus = other->forwardStatus;
+    relayDataRate = other->relayDataRate;
+    forwardingRelayId = other->forwardingRelayId;
+    transmissionPower = other->transmissionPower;
+    spreadingFactor = other->spreadingFactor;
+    rssi = other->rssi;
+    rssi_margin = other->rssi_margin;
+    snr = other->snr;
+    uplinkRssiMetadata = other->uplinkRssiMetadata;
+    uplinkSnrMetadata = other->uplinkSnrMetadata;
+    uplinkSenderPositionX = other->uplinkSenderPositionX;
+    uplinkSenderPositionY = other->uplinkSenderPositionY;
+    senderPositionX = other->senderPositionX;
+    senderPositionY = other->senderPositionY;
+    gateLNS = other->gateLNS;
+    senderId = other->senderId;
 }
-
-LoRaPacket::LoRaPacket(LoRaPacket* duplicate) : cMessage(*duplicate)
-{
-    isUplink = duplicate-> isUplink;
-    ackRequired = duplicate->ackRequired;
-    relayRequired = duplicate->relayRequired;
-    isRelayed = duplicate->isRelayed;
-
-    id = duplicate->id;
-    length = duplicate->length;
-    channel = duplicate->channel;
-
-    transmissionPower = duplicate->transmissionPower;
-    spreadingFactor = duplicate->spreadingFactor;
-    rssi = duplicate->rssi;
-    rssi_margin = duplicate->rssi_margin;
-
-    senderPositionX = duplicate->senderPositionX;
-    senderPositionY = duplicate->senderPositionY;
-
-    gateLNS = duplicate->gateLNS;
-    senderId = duplicate->senderId;
-}
-
 
 LoRaPacket::LoRaPacket(const char *name, short kind) : cMessage(name, kind)
 {
     isUplink = false;
-
-    ackRequired = false;
     isRelayed = false;
-    relayRequired = false;
     ackRequired = false;
-
+    relayRequired = false;
+    encapsulated = false;
+    worValid = true;
+    rxrEligible = false;
     id = 0;
     length = 51;
     channel = 1;
-
+    worChannel = 1;
+    uplinkChannel = 1;
+    originalKind = MSGUNKNOWN;
+    originalLength = 0;
+    originalSpreadingFactor = 12;
+    fPort = 0;
+    worType = WorType::CLASS_A_UPLINK;
+    worFrameCounter = 0;
+    preambleSymbols = 0;
+    cadPeriodicityMs = 1000;
+    cadToRxSymbols = 8;
+    relayClockAccuracyPpm = 40;
+    tOffsetMs = 0;
+    forwardStatus = 0;
+    relayDataRate = 0;
+    forwardingRelayId = -1;
     transmissionPower = 14;
     spreadingFactor = 12;
     rssi = 0;
     rssi_margin = 1;
-
+    snr = 0;
+    uplinkRssiMetadata = 0;
+    uplinkSnrMetadata = 0;
+    uplinkSenderPositionX = 0;
+    uplinkSenderPositionY = 0;
     senderPositionX = 0;
     senderPositionY = 0;
-
     gateLNS = 0;
     senderId = 0;
 }
 
 int LoRaPacket::calcBitrate()
 {
-    switch (this->spreadingFactor)
-    {
-        case 12:
-            return 250;
-        case 11:
-            return 440;
-        case 10:
-            return 980;
-        case 9:
-            return 1760;
-        case 8:
-            return 3125;
-        case 7:
-            return 5470;
-        default:
-            return 0;
+    switch (spreadingFactor) {
+        case 12: return 250;
+        case 11: return 440;
+        case 10: return 980;
+        case 9: return 1760;
+        case 8: return 3125;
+        case 7: return 5470;
+        default: return 0;
     }
 }
 
 float LoRaPacket::calcSensitivity()
 {
-    switch (this->spreadingFactor)
-    {
-        case 12:
-            return 20;
-        case 11:
-            return 17.5;
-        case 10:
-            return 15;
-        case 9:
-            return 12.5;
-        case 8:
-            return 10;
-        case 7:
-            return 7.5;
-        default:
-            return 0;
+    switch (spreadingFactor) {
+        case 12: return 20;
+        case 11: return 17.5;
+        case 10: return 15;
+        case 9: return 12.5;
+        case 8: return 10;
+        case 7: return 7.5;
+        default: return 0;
     }
 }
 
-int LoRaPacket::calcMsgPreamble()
+double LoRaPacket::symbolTime() const
 {
+    return std::pow(2.0, spreadingFactor) / 125000.0;
+}
 
+int LoRaPacket::calcMsgPreamble() const
+{
     if (isWOR())
-        return 1000 / calcBitrate();
-
+        return preambleSymbols > 0 ? preambleSymbols : static_cast<int>(std::ceil(1.0 / symbolTime()));
     return 8;
 }
 
-int LoRaPacket::isWOR()
-{
-    if (this->getKind() == MsgType::MSGWOR)
-        return 1;
-
-    return 0;
-}
+bool LoRaPacket::isWOR() const { return getKind() == MsgType::MSGWOR; }
+bool LoRaPacket::isWorAck() const { return getKind() == MsgType::MSGWORACK; }
 
 int LoRaPacket::autodetectUplink()
 {
-    switch (this->getKind())
-    {
+    switch (getKind()) {
         case MSGUNKNOWN:
         case MSGWOR:
         case JOINREQUEST:
         case FORWARDUPLINK:
         case UPLINK:
         case TIMEOUT:
-            isUplink = 1;
+            isUplink = true;
             break;
-
+        case MSGWORACK:
         case JOINACCEPT:
         case DOWNLINK:
         case FORWARDDOWNLINK:
         case ACK:
-            isUplink = 0;
+            isUplink = false;
             break;
-
+        default:
+            break;
     }
     return isUplink;
 }
 
-float LoRaPacket::calcMsgDuration()
+float LoRaPacket::calcMsgDuration() const
 {
-    int msgSize = length;
-    int sf = spreadingFactor;
-
-    double de = 0;
-    if (sf == 11 || sf == 12)
-        de = 1;
-    int bandwidth = 125;
-    int loraHeaderSize = 13;
-    int preambleSymbols = calcMsgPreamble();
-
-
-    double explicitHeader = 1;
-    int codingRate = 5;
-    double I18 = pow(2, sf) / (bandwidth * 1000) * 1000;
-    double I19 = (preambleSymbols + 4.25) * I18;
-    double roundUp = ceil(
-            ((8 * (msgSize + loraHeaderSize) - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) / (4 * (sf - 2 * de))))
-            * codingRate;
-    double maximum = fmax(roundUp, 0);
-    double I20 = 8 + maximum;
-    double I21 = I20 * I18;
-    double formula = I19 + I21;
-
-    return formula / 1000.0;
+    const int sf = spreadingFactor;
+    const double lowDataRateOptimization = (sf == 11 || sf == 12) ? 1.0 : 0.0;
+    const int bandwidthKhz = 125;
+    const int loraHeaderSize = 13;
+    const int preamble = calcMsgPreamble();
+    const double explicitHeader = 1;
+    const int codingRate = 5;
+    const double symbolMs = std::pow(2.0, sf) / (bandwidthKhz * 1000.0) * 1000.0;
+    const double preambleMs = (preamble + 4.25) * symbolMs;
+    const double encoded = std::ceil(
+        (8 * (length + loraHeaderSize) - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) /
+        (4 * (sf - 2 * lowDataRateOptimization))) * codingRate;
+    const double payloadSymbols = 8 + std::max(encoded, 0.0);
+    return static_cast<float>((preambleMs + payloadSymbols * symbolMs) / 1000.0);
 }
 
-double LoRaPacket::CalculateCADLength(int SpreadingFactor)
+double LoRaPacket::CalculateCADLength(int sf)
 {
-
-    switch (SpreadingFactor){
-        case 12:
-            return (0.5 + 32.00);
-        case 11:
-            return (0.5 + 18.18);
-        case 10:
-            return (0.5 + 8.16);
-        case 9:
-            return (0.5 + 4.55);
-        case 8:
-            return (0.5 + 2.56);
-        case 7:
-            return (0.5 + 1.46);
-        default:
-            return 0;
+    switch (sf) {
+        case 12: return 32.50;
+        case 11: return 18.68;
+        case 10: return 8.66;
+        case 9: return 5.05;
+        case 8: return 3.06;
+        case 7: return 1.96;
+        default: return 0;
     }
 }
 
-std::string LoRaPacket::GetPacketName()
+std::string LoRaPacket::GetPacketName() const
 {
-    switch (this->getKind())
-    {
+    switch (getKind()) {
         case MSGUNKNOWN: return "MSGUNKNOWN";
         case MSGWOR: return "WOR";
+        case MSGWORACK: return "WOR ACK";
         case JOINREQUEST: return "JOINREQUEST";
         case JOINACCEPT: return "JOINACCEPT";
         case FORWARDUPLINK: return "FORWARDUPLINK";
         case FORWARDDOWNLINK: return "FORWARDDOWNLINK";
-        case UPLINK: return "UPLINK ";
+        case UPLINK: return "UPLINK";
         case DOWNLINK: return "DOWNLINK";
         case ACK: return "ACK";
         case TIMEOUT: return "TIMEOUT";
-
+        default: return "UNKNOWN";
     }
-    return "UNKNONW";
 }
 
-LoRaPacket::~LoRaPacket()
-{
-    // TODO Auto-generated destructor stub
-}
+LoRaPacket::~LoRaPacket() = default;
+LoRaPacket *LoRaPacket::dupLoRa() { return new LoRaPacket(this); }
 
-LoRaPacket* LoRaPacket::dupLoRa()
-{
-    return new LoRaPacket(this);
-}
-
-} /* namespace opp_lora_relay_official */
+} // namespace opp_lora_relay_official

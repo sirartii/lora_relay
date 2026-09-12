@@ -14,9 +14,8 @@
 //
 
 package opp_lora_relay_official;
-import opp_lora_relay_official.Radio;
-import opp_lora_relay_official.LogicRelay;
-import opp_lora_relay_official.Distortion;
+import opp_lora_relay_official.GatewayRadio;
+import opp_lora_relay_official.LogicGateway;
 
 
 module Gateway
@@ -31,21 +30,17 @@ module Gateway
      	//output radioOut @dire;
      	
     submodules:
-        radio: Radio {
+        radio: GatewayRadio {
             @display("p=342,203");
         }
         logic: LogicGateway {
             @display("p=228,33");
         }
-        distortion: Distortion {
-            @display("p=72,134");
-        }
     connections:
         radio.radioIn <-- radioIn;
         //        radio.radioOut --> radioOut;
         radio.fromLogic <-- logic.logicOut;
-        radio.toLogic --> distortion.in;
-        distortion.out --> logic.logicIn;
+        radio.toLogic --> logic.logicIn;
 
         logic.json <--> json;
 }

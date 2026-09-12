@@ -1,579 +1,465 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "LogicEndnode.h"
+
 #include <algorithm>
 #include <cmath>
+
 #include "LoRaPacket.h"
 
 namespace opp_lora_relay_official {
 
 Define_Module(LogicEndnode);
 
-LogicEndnode::LogicEndnode()
-{
-    // timerMessageWindow1/2 tworzymy w initialize()
+namespace {
+constexpr long long DAY_MS = 24LL * 60LL * 60LL * 1000LL;
 }
 
 LogicEndnode::~LogicEndnode()
 {
-    if (timerMessageWindow1) cancelAndDelete(timerMessageWindow1);
-    if (timerMessageWindow2) cancelAndDelete(timerMessageWindow2);
+    for (auto *timer : windowTimers)
+        if (timer != nullptr)
+            cancelAndDelete(timer);
+    if (responseTimer != nullptr)
+        cancelAndDelete(responseTimer);
 }
 
 void LogicEndnode::initialize()
 {
-    updateDaytime();
+    transmittingWindowStart[0] = par("transmittingWindowStart1").intValue();
+    transmittingWindowStart[1] = par("transmittingWindowStart2").intValue();
+    transmittingWindowDuration[0] = par("transmittingWindowDuration1").intValue();
+    transmittingWindowDuration[1] = par("transmittingWindowDuration2").intValue();
+    windowsPerDay = std::max(1, std::min(2, static_cast<int>(par("windowsPerDay").intValue())));
+    framesPerWindowMin = std::max(1, static_cast<int>(par("framesPerWindowMin").intValue()));
+    framesPerWindowMax = std::max(framesPerWindowMin, static_cast<int>(par("framesPerWindowMax").intValue()));
+    applicationPayloadLength = par("applicationPayloadLength").intValue();
+    missedPacketsToSearchRelay = std::max(1, static_cast<int>(par("missedPacketsToSearchRelay").intValue()));
+    forceSpreadingFactor = par("forceSF").intValue();
+    model = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
 
-    // Parametry okien (minuty od północy / czas trwania w minutach)
-    transmittingWindowStart1    = par("transmittingWindowStart1").intValue();
-    transmittingWindowStart2    = par("transmittingWindowStart2").intValue();
-    transmittingWindowDuration1 = par("transmittingWindowDuration1").intValue();
-    transmittingWindowDuration2 = par("transmittingWindowDuration2").intValue();
+    ts011EndDeviceSpreadingFactor = par("ts011EndDeviceSpreadingFactor").intValue();
+    ts011DefaultWorChannel = par("ts011DefaultWorChannel").intValue();
+    ts011SecondWorChannel = par("ts011SecondWorChannel").intValue();
+    ts011UplinkChannel = par("ts011UplinkChannel").intValue();
+    ts011SecondChannelConfigured = par("ts011SecondChannelEnabled").boolValue();
+    ts011CadPeriodicity = par("ts011CadPeriodicity").doubleValue();
+    ts011CadToRxSymbols = par("ts011CadToRxSymbols").intValue();
+    ts011WorAckDelay = par("ts011WorAckDelay").doubleValue();
+    ts011WorDataDelay = par("ts011WorDataDelay").doubleValue();
+    ts011WorValidityProbability = par("ts011WorValidityProbability").doubleValue();
+    ts011RelayClockAccuracyPpm = par("ts011RelayClockAccuracyPpm").intValue();
+    ts011EndDeviceClockAccuracyPpm = par("ts011EndDeviceClockAccuracyPpm").intValue();
+    knownCadPeriodicity = 1.0; // mandatory initialized-state assumption
+    if (ts011WorValidityProbability < 0 || ts011WorValidityProbability > 1)
+        throw cRuntimeError("ts011WorValidityProbability must be in [0,1]");
+    if (applicationPayloadLength < 1 || applicationPayloadLength > 255)
+        throw cRuntimeError("applicationPayloadLength must be in [1,255]");
 
-    // Nowe parametry konfigurowalne z ini
-    windowsPerDay      = hasPar("windowsPerDay")      ? par("windowsPerDay").intValue()      : 2;
-    framesPerWindowMin = hasPar("framesPerWindowMin") ? par("framesPerWindowMin").intValue() : 1;
-    framesPerWindowMax = hasPar("framesPerWindowMax") ? par("framesPerWindowMax").intValue() : 4;
-    if (framesPerWindowMax < framesPerWindowMin) std::swap(framesPerWindowMin, framesPerWindowMax);
-    if (framesPerWindowMin < 1) framesPerWindowMin = 1;
+    keeper = check_and_cast<Keeper *>(getParentModule()->getParentModule()->getSubmodule("keeper"));
+    myKeeperIndex = keeper->registerEndnode();
+    wakeupRelay = registerSignal("wakeupRelay");
+    lastAckTime = simTime();
+    lastOnline = simTime();
+    updateLogicalState(EndDeviceState::OFFLINE);
 
-    // Losowa liczba ramek do wysłania w bieżącym cyklu dla okna #1 i #2
-    framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-    framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-
-    // Początek dzisiejszej doby (dokładnie, w minutach)
-    simtime_t dayStart = simTime() - SimTime(dayTime*60000, SIMTIME_MS);
-
-    // Okno #1: start + losowy offset w ms
-    timerMessageWindow1 = new cMessage("timerMessageWindow1");
-    timerMessageWindow1->setKind(SelfMsgType::TXWINDOW1);
-    {
-        simtime_t start1 = dayStart + SimTime(transmittingWindowStart1*60000, SIMTIME_MS);
-        long long dur1ms = 1LL * transmittingWindowDuration1 * 60LL * 1000LL;
-        long long off1ms = dur1ms > 0 ? intrand((int)dur1ms) : 0;
-        simtime_t t1     = start1 + SimTime(off1ms, SIMTIME_MS);
-        if (t1 < simTime()) t1 += SimTime(24 * 60 * 60000, SIMTIME_MS);
-        scheduleAt(t1, timerMessageWindow1);
+    for (int i = 0; i < windowsPerDay; ++i) {
+        framesRemaining[i] = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+        windowTimers[i] = new cMessage(i == 0 ? "applicationWindow1" : "applicationWindow2",
+                                       i == 0 ? SelfMsgType::TXWINDOW1 : SelfMsgType::TXWINDOW2);
+        scheduleInitialWindow(windowTimers[i], i);
     }
 
-    // Okno #2 (opcjonalnie)
-    timerMessageWindow2 = nullptr;
-    if (windowsPerDay >= 2) {
-        timerMessageWindow2 = new cMessage("timerMessageWindow2");
-        timerMessageWindow2->setKind(SelfMsgType::TXWINDOW2);
-        simtime_t start2 = dayStart + SimTime(transmittingWindowStart2 * 60000, SIMTIME_MS);
-        long long dur2ms = 1LL * transmittingWindowDuration2 * 60LL * 1000LL;
-        long long off2ms = dur2ms > 0 ? intrand((int)dur2ms) : 0;
-        simtime_t t2     = start2 + SimTime(off2ms, SIMTIME_MS);
-        if (t2 < simTime()) t2 += SimTime(24 * 60 * 60000, SIMTIME_MS);
-        scheduleAt(t2, timerMessageWindow2);
+    WATCH(endDeviceState);
+    WATCH(syncState);
+    WATCH(consecutiveWorWithoutAck);
+    WATCH(worTransmitted);
+    WATCH(worAckReceived);
+}
+
+void LogicEndnode::scheduleInitialWindow(cMessage *timer, int windowIndex)
+{
+    const long long nowMs = simTime().inUnit(SIMTIME_MS);
+    const long long dayStartMs = (nowMs / DAY_MS) * DAY_MS;
+    long long startMs = dayStartMs + transmittingWindowStart[windowIndex] * 60000LL;
+    const long long durationMs = std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
+    if (startMs + durationMs <= nowMs)
+        startMs += DAY_MS;
+    const long long earliest = std::max(nowMs + 1, startMs);
+    const long long latest = startMs + durationMs;
+    const long long offset = latest > earliest ? intrand(static_cast<int>(latest - earliest)) : 0;
+    scheduleAt(SimTime(earliest + offset, SIMTIME_MS), timer);
+}
+
+void LogicEndnode::scheduleFollowingWindow(cMessage *timer, int windowIndex)
+{
+    const long long nowMs = simTime().inUnit(SIMTIME_MS);
+    const long long dayStartMs = (nowMs / DAY_MS) * DAY_MS;
+    const long long startMs = dayStartMs + transmittingWindowStart[windowIndex] * 60000LL;
+    const long long endMs = startMs + std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
+    --framesRemaining[windowIndex];
+    if (framesRemaining[windowIndex] > 0 && nowMs + 1 < endMs) {
+        const long long remaining = endMs - nowMs - 1;
+        scheduleAt(SimTime(nowMs + 1 + intrand(static_cast<int>(remaining)), SIMTIME_MS), timer);
+        return;
     }
-
-    /*
-        int index = this->getParentModule()->getIndex();
-        int posX = 300 + (index % 5) * 100;
-        int posY = 100 + (index / 5) * 120;
-
-        if (index == 18 or index == 19)
-            posX += 300;
-
-        if (index == 0 ||index == 5)
-            posX += 800;*/
-
-
-        //this->getParentModule()->getDisplayString().setTagArg("p", 0, posX);
-        //this->getParentModule()->getDisplayString().setTagArg("p", 1, posY);
-        //this->getParentModule()->getDisplayString().setTagArg("p", 2, "");
-        //this->getParentModule()->getDisplayString().setTagArg("p", 3, "");
-        //this->getParentModule()->getDisplayString().setTagArg("p", 4, "");
-
-        //getAncestorPar("xpos").setDoubleValue(posX);
-        //getAncestorPar("ypos").setDoubleValue(posY);
-
-        endDeviceState = EndDeviceState::OFFLINE;         //this must stay, otherwise below will throw an exception
-        updateLogicalState(EndDeviceState::OFFLINE);
-
-        retransmissionModel = (RetransmissionModel) par("retransmissionModel").intValue();
-        RTCdrift = par("clockDriftMax").doubleValue() / 1000000.0;  //ppm's in config
-
-        keeper = check_and_cast<Keeper*>(getParentModule()->getParentModule()->getSubmodule("keeper"));
-        myKeeperIndex = keeper->registerEndnode();
-
-        lastACK = 0;
-        waitingResponse = 0;
-        missedResponse = 0;
-        packetCounter = 0;
-        MsgAfterWOR = 0;
-        lastACKTime = simTime();
-
-        WATCH(lastACK);
-        WATCH(packetCounter);
-
-        wakeupRelay = registerSignal("wakeupRelay");
-        offlineMax = 0;
-        offlineTotal = 0;
-        lastOnline = simTime();
+    framesRemaining[windowIndex] = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+    const long long nextStart = startMs + DAY_MS;
+    const long long duration = std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
+    scheduleAt(SimTime(nextStart + intrand(static_cast<int>(duration)), SIMTIME_MS), timer);
 }
 
 void LogicEndnode::handleMessage(cMessage *msg)
 {
-    updateDaytime();
-
     if (msg->isSelfMessage()) {
-
-        // wejdziemy tu tylko, gdy oczekiwaliśmy odpowiedzi i minął timeout
-        if (msg->getKind() == SelfMsgType::RXTIMER)
-        {
-            if (!waitingResponse) {
+        switch (msg->getKind()) {
+            case SelfMsgType::TXWINDOW1:
+            case SelfMsgType::TXWINDOW2: {
+                const int index = msg->getKind() == SelfMsgType::TXWINDOW1 ? 0 : 1;
+                scheduleFollowingWindow(msg, index);
+                beginApplicationTransmission();
+                return;
+            }
+            case SelfMsgType::TS011_SEND_WOR:
+                sendTs011Wor(msg);
+                return;
+            case SelfMsgType::TS011_SEND_DATA: {
+                const int packetId = msg->par("packetId").longValue();
+                const bool join = msg->par("join").boolValue();
+                const bool ack = msg->par("ackRequired").boolValue();
+                const bool relayed = msg->par("relayed").boolValue();
+                if (model == RetransmissionModel::TS011 && relayed)
+                    updateTs011MissedAck(pendingWorCounter);
+                sendDataFrame(packetId, join, ack, relayed);
                 delete msg;
                 return;
             }
-
-            waitingResponse = 0;
-            missedResponse++;
-
-            const int missedLimit = std::max(
-                1, static_cast<int>(par("missedPacketsToSearchRelay").intValue())
-            );
-            if (missedResponse >= missedLimit)
-            {
-                missedResponse = 0;
-                lastACK = 0;
-                updateLogicalState(
-                    keeper->hasRelayPath() ? EndDeviceState::JOIN_RELAY : EndDeviceState::OFFLINE
-                );
-            }
-            cMessage* ra = new cMessage("ResetADR",MsgType::RESET_ADR);
-            send(ra, "logicOut");
-            delete msg;
-            return;
-        }
-
-        // Koniec transmisji (animacja/GUI)
-        if (msg->getKind() == SelfMsgType::TXTIMER)
-        {
-            this->getParentModule()->getDisplayString().setTagArg("r",0,"0");
-            return;
-        }
-
-        // Po WOR nadajemy zasadniczą ramkę
-        if (msg->getKind() == SelfMsgType::TXREPEAT) {
-            MsgAfterWOR = 1;
-        }
-
-        if (msg->getKind() == SelfMsgType::TXWINDOW1) {
-            // 1) Początek bieżącej doby: PODŁOGA do 24 h (nie używamy 'dayTime')
-            static const long long DAY_MS = 24LL * 60LL * 60000LL;
-            const long long nowMs  = simTime().inUnit(SIMTIME_MS);
-            const long long day0Ms = (nowMs / DAY_MS) * DAY_MS;
-            simtime_t dayStart     = SimTime(day0Ms, SIMTIME_MS);
-
-            simtime_t start = dayStart + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
-            simtime_t end   = start   + SimTime(1LL * transmittingWindowDuration1 * 60000LL, SIMTIME_MS);
-
-            const long long durMs = (end - start).inUnit(SIMTIME_MS);
-            const int N = framesPerWindowMin; // (jak pisałeś: min == max)
-
-            // 2) Przed startem / po oknie lub brak ramek -> ustaw pierwszy slot i WYJDŹ
-            if (simTime() < start || simTime() >= end || framesRemainingWin1 <= 0) {
-                if (framesRemainingWin1 <= 0)
-                    framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-
-                // dziś, jeśli jeszcze przed startem; inaczej jutro
-                simtime_t base = (simTime() < start)
-                               ? start
-                               : (dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                         + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS));
-
-                if (framesRemainingWin1 > 0 && durMs > 0) {
-                    long long slot = std::max(1LL, durMs / framesRemainingWin1);
-                    long long phi  = intrand((int)slot);   // faza na całe okno
-                    base += SimTime(phi, SIMTIME_MS);
-                }
-                if (base <= simTime()) base = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
-                scheduleAt(base, msg);
+            case SelfMsgType::RESPONSE_TIMEOUT:
+                handleResponseTimeout(msg);
                 return;
-            }
-
-            // 3) Jesteśmy w oknie: wyślij TERAZ i zaplanuj kolejną w następnym slocie
-            framesRemainingWin1--;
-
-            if (durMs > 0 && N > 0) {
-                long long slot = std::max(1LL, durMs / N);
-                long long elapsed = (simTime() - start).inUnit(SIMTIME_MS);
-                long long k   = elapsed / slot;
-                long long phi = elapsed - k * slot; // „faza” = (now - start) % slot
-
-                if (framesRemainingWin1 > 0) {
-                    simtime_t tnext = start + SimTime((k + 1) * slot + phi, SIMTIME_MS); // = now + slot (w msowej siatce)
-                    if (tnext >= end) {
-                        // brak miejsca -> pierwszy slot jutrzejszego okna
-                        framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                        tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                       + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
-                        if (framesRemainingWin1 > 0) {
-                            long long slot2 = std::max(1LL, durMs / framesRemainingWin1);
-                            tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
-                        }
-                    }
-                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
-                    scheduleAt(tnext, msg);
-                    // UWAGA: brak 'return' – poniżej wysyłasz bieżącą ramkę
-                } else {
-                    // to była ostatnia ramka w tym oknie → ustaw pierwszy slot na jutro
-                    framesRemainingWin1 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                    simtime_t tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                              + SimTime(1LL * transmittingWindowStart1 * 60000LL, SIMTIME_MS);
-                    if (framesRemainingWin1 > 0) {
-                        long long slot2 = std::max(1LL, durMs / framesRemainingWin1);
-                        tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
-                    }
-                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS); // <-- zabezpieczenie
-                    scheduleAt(tnext, msg);
-                    // bez 'return' – najpierw wyślij bieżącą ramkę
-                }
-            }
-
-            // >>> tutaj pozostaje Twój kod, który faktycznie wysyła ramkę "TERAZ"
-        }
-
-
-        // --- Okno nadawcze #2 ------------------------------------------------
-        if (msg->getKind() == SelfMsgType::TXWINDOW2) {
-            static const long long DAY_MS = 24LL * 60LL * 60000LL;
-            const long long nowMs  = simTime().inUnit(SIMTIME_MS);
-            const long long day0Ms = (nowMs / DAY_MS) * DAY_MS;
-            simtime_t dayStart     = SimTime(day0Ms, SIMTIME_MS);
-
-            simtime_t start = dayStart + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
-            simtime_t end   = start   + SimTime(1LL * transmittingWindowDuration2 * 60000LL, SIMTIME_MS);
-
-            const long long durMs = (end - start).inUnit(SIMTIME_MS);
-            const int N = framesPerWindowMin;
-
-            if (simTime() < start || simTime() >= end || framesRemainingWin2 <= 0) {
-                if (framesRemainingWin2 <= 0)
-                    framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-
-                simtime_t base = (simTime() < start)
-                               ? start
-                               : (dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                         + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS));
-
-                if (framesRemainingWin2 > 0 && durMs > 0) {
-                    long long slot = std::max(1LL, durMs / framesRemainingWin2);
-                    long long phi  = intrand((int)slot);
-                    base += SimTime(phi, SIMTIME_MS);
-                }
-                if (base <= simTime()) base = simTime() + SimTime(1, SIMTIME_MS);
-                scheduleAt(base, msg);
-                return;
-            }
-
-            framesRemainingWin2--;
-
-            if (durMs > 0 && N > 0) {
-                long long slot = std::max(1LL, durMs / N);
-                long long elapsed = (simTime() - start).inUnit(SIMTIME_MS);
-                long long k   = elapsed / slot;
-                long long phi = elapsed - k * slot;
-
-                if (framesRemainingWin2 > 0) {
-                    simtime_t tnext = start + SimTime((k + 1) * slot + phi, SIMTIME_MS);
-                    if (tnext >= end) {
-                        framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                        tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                       + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
-                        if (framesRemainingWin2 > 0) {
-                            long long slot2 = std::max(1LL, durMs / framesRemainingWin2);
-                            tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
-                        }
-                    }
-                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS);
-                    scheduleAt(tnext, msg);
-                } else {
-                    framesRemainingWin2 = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-                    simtime_t tnext = dayStart + SimTime(DAY_MS, SIMTIME_MS)
-                                              + SimTime(1LL * transmittingWindowStart2 * 60000LL, SIMTIME_MS);
-                    if (framesRemainingWin2 > 0) {
-                        long long slot2 = std::max(1LL, durMs / framesRemainingWin2);
-                        tnext += SimTime(intrand((int)slot2), SIMTIME_MS);
-                    }
-                    if (tnext <= simTime()) tnext = simTime() + SimTime(1, SIMTIME_MS);
-                    scheduleAt(tnext, msg);
-                }
-            }
-
-            // >>> poniżej: wysyłka ramki "TERAZ"
-        }
-
-
-        // --- Emisja ramki (logika stanu urządzenia) --------------------------
-
-        cModule *parent = getParentModule();
-        LoRaPacket *job = new LoRaPacket(parent->getFullName(), 51);
-
-        const int packetId = packetCounter++;
-        job->id = packetId;
-        job->ackRequired = (packetId % 5) == 0 || lastACK > 0; // co 5-ta lub gdy poprzedni ACK nie dotarł
-
-        switch (endDeviceState){
-
-            case EndDeviceState::OFFLINE:
-            case EndDeviceState::JOIN_DIRECT:
-                job->setKind(MsgType::JOINREQUEST);
-                job->setName("JOIN DIRECT");
-                job->ackRequired = true;
-                job->relayRequired = false;
-                updateLogicalState(EndDeviceState::JOIN_DIRECT);
-                job->length = 15;
-                break;
-
-            // TS011: WOR -> JOIN; EN038: pojedynczy JOIN_RELAY
-            case EndDeviceState::JOIN_RELAY:
-                if (MsgAfterWOR)
-                {
-                    job->setName("JOIN RELAY");
-                    job->setKind(MsgType::JOINREQUEST);
-                    MsgAfterWOR = 0;
-                    job->ackRequired = true;
-                    job->relayRequired = true;
-                    job->length = RELAY_JOIN_LENGTH;
-                }
-                else
-                {
-                    if (retransmissionModel == RetransmissionModel::EP431)
-                    {
-                        cMessage *rxWORMsg = msg->dup();
-                        rxWORMsg->setKind(SelfMsgType::TXREPEAT);
-
-                        double windowsize = SIMTIME_DBL(simTime() - lastACKTime) * RTCdrift;
-                        long long wsMs = (long long) llround(std::max(0.0, windowsize) * 1000.0);
-                        scheduleAt(simTime() + SimTime(wsMs, SIMTIME_MS), rxWORMsg);
-                        emit(wakeupRelay, windowsize*2, this);
-                        delete job;
-                        return; // nie wysyłamy teraz ramki radiowej
-                    }
-                    else
-                    {
-                        job->setName("WOR");
-                        job->setKind(MsgType::MSGWOR);
-                        job->length = WOR_DATA_LENGTH;
-                        job->ackRequired = false;
-
-                        // zaplanuj JOIN po WOR
-                        cMessage *rxWORMsg = msg->dup();
-                        rxWORMsg->setKind(SelfMsgType::TXREPEAT);
-                        scheduleAt(simTime() + WOR_DATA_DELAY, rxWORMsg);
-                    }
-                }
-                break;
-
-            case EndDeviceState::ONLINE_DIRECT:
-                job->setKind(MsgType::UPLINK);
-                if (job->ackRequired) job->setName("UPLINK_W_ACK");
-                else                  job->setName("UPLINK");
-
-                job->length = 51; // payload przykładowy
-                break;
-
-            case EndDeviceState::ONLINE_RELAYED:
-                if (MsgAfterWOR)
-                {
-                    job->setKind(MsgType::UPLINK);
-                    job->relayRequired = 1;
-                    if (job->ackRequired) job->setName("UPLINK_W_ACK");
-                    else                  job->setName("UPLINK");
-
-                    job->length = 51;
-                    MsgAfterWOR = 0;
-                }
-                else
-                {
-                    if (retransmissionModel == RetransmissionModel::EP431)
-                    {
-                        cMessage *rxWORMsg = msg->dup();
-                        rxWORMsg->setKind(SelfMsgType::TXREPEAT);
-
-                        double windowsize = SIMTIME_DBL(simTime() - lastACKTime) * RTCdrift;
-                        long long wsMs = (long long) llround(std::max(0.0, windowsize) * 1000.0);
-                        scheduleAt(simTime() + SimTime(wsMs, SIMTIME_MS), rxWORMsg);
-                        emit(wakeupRelay, windowsize*2, this);
-                        delete job;
-                        return;
-                    }
-                    else
-                    {
-                        job->setName("WOR");
-                        job->setKind(MsgType::MSGWOR);
-                        job->length = WOR_DATA_LENGTH;
-                        job->ackRequired = false;
-
-                        cMessage *rxWORMsg = msg->dup();
-                        rxWORMsg->setKind(SelfMsgType::TXREPEAT);
-                        scheduleAt(simTime() + WOR_DATA_DELAY, rxWORMsg);
-                    }
-                }
-                break;
-
             default:
-                break;
+                delete msg;
+                return;
         }
-
-        // Ustaw parametry radiowe i metadane
-        job->senderPositionX   = getParentModule()->par("xpos").doubleValue();
-        job->senderPositionY   = getParentModule()->par("ypos").doubleValue();
-        job->transmissionPower = 14;
-        job->channel           = 1;   // TODO
-        job->addPar("KeeperIndex") = myKeeperIndex;
-        job->addPar("PacketId")    = packetId;
-
-        int sfParam = par("forceSF").intValue();
-        if (endDeviceState == EndDeviceState::JOIN_RELAY ||
-            endDeviceState == EndDeviceState::ONLINE_RELAYED ||
-            job->relayRequired)                      // dodatkowe zabezpieczenie
-        {
-            job->spreadingFactor = 9;
-        }
-        else {
-            job->spreadingFactor = sfParam;
-        }
-
-        waitingResponse = job->ackRequired;
-
-        // Bardzo ważne dla prawidłowej klasyfikacji kolizji/statystyk
-        job->isUplink = true;
-
-        send(job, "logicOut");
-        keeper->recordMessageTransmission(myKeeperIndex, packetId, true);
-
-        if (waitingResponse)
-        {
-            lastACK++;
-            cMessage *rxTimerMsg = msg->dup();
-            rxTimerMsg->setKind(SelfMsgType::RXTIMER);
-            scheduleAt(simTime() + REPLAY_TIMEOUT, rxTimerMsg);
-        }
-        if (msg->getKind() == SelfMsgType::TXREPEAT)
-            delete msg;
     }
-    else {
-        // Przetwarzanie DL
-        if (msg->arrivedOn("logicIn")) {
-            LoRaPacket *msgLoRa = dynamic_cast<LoRaPacket*>(msg);
 
-            // Zarejestruj dostarczenie DL/ACK dla statystyk dziennych
-            if (msgLoRa && !msgLoRa->isUplink) {
-                long devIdx = msgLoRa->par("KeeperIndex").longValue();
-                long pktId  = msgLoRa->par("PacketId").longValue();
-                keeper->recordDownlinkReception(devIdx, pktId); // istniejąca u Ciebie metoda
-            }
+    auto *packet = dynamic_cast<LoRaPacket *>(msg);
+    if (packet == nullptr) {
+        delete msg;
+        return;
+    }
+    if (packet->isWorAck())
+        handleWorAck(packet);
+    else
+        handleDownlink(packet);
+}
 
-            missedResponse = 0;
+void LogicEndnode::beginApplicationTransmission()
+{
+    const int packetId = packetCounter++;
+    const bool ackRequired = packetId % 5 == 0 || lastAckRequestCount > 0;
+    const bool join = endDeviceState == EndDeviceState::OFFLINE ||
+                      endDeviceState == EndDeviceState::JOIN_DIRECT ||
+                      endDeviceState == EndDeviceState::JOIN_RELAY;
+    const bool relayed = endDeviceState == EndDeviceState::JOIN_RELAY ||
+                         endDeviceState == EndDeviceState::ONLINE_RELAYED;
 
-            if (msgLoRa->getKind() == MsgType::JOINACCEPT)
-            {
-                if (endDeviceState == EndDeviceState::JOIN_RELAY)
-                    updateLogicalState(EndDeviceState::ONLINE_RELAYED);
-                else if (endDeviceState == EndDeviceState::JOIN_DIRECT)
-                    updateLogicalState(EndDeviceState::ONLINE_DIRECT);
+    if (!relayed) {
+        if (join)
+            updateLogicalState(EndDeviceState::JOIN_DIRECT);
+        sendDataFrame(packetId, join, true, false);
+        return;
+    }
 
-                lastACK = 0;
-                lastACKTime = simTime();
-                waitingResponse = 0;
-            }
+    if (model == RetransmissionModel::TS011) {
+        scheduleTs011Wor(packetId, join, ackRequired);
+        return;
+    }
 
-            if (msgLoRa->getKind() == MsgType::ACK)
-            {
-                lastACK = 0;
-                lastACKTime = simTime();
-                waitingResponse = 0;
-            }
+    const double driftWindow = std::max(0.0, (simTime() - lastAckTime).dbl() *
+        par("clockDriftMax").doubleValue() / 1000000.0);
+    emit(wakeupRelay, driftWindow * 2, this);
+    auto *event = new cMessage("EP431 data", SelfMsgType::TS011_SEND_DATA);
+    event->addPar("packetId") = packetId;
+    event->addPar("join") = join;
+    event->addPar("ackRequired") = ackRequired;
+    event->addPar("relayed") = true;
+    scheduleAt(simTime() + driftWindow, event);
+}
 
-            if (msgLoRa->getKind() == MsgType::TIMEOUT)
-            {
-                updateLogicalState(EndDeviceState::OFFLINE);
-            }
+int LogicEndnode::chooseWorChannel() const
+{
+    if (syncState == Ts011SyncState::SYNCHRONIZED && ts011SecondChannelConfigured)
+        return ts011SecondWorChannel;
+    return ts011DefaultWorChannel;
+}
 
-            delete msg;
-        }
+int LogicEndnode::unsynchronizedPreambleSymbols(int spreadingFactor) const
+{
+    const double symbol = std::pow(2.0, spreadingFactor) / 125000.0;
+    return static_cast<int>(std::floor(knownCadPeriodicity / symbol)) + 1 + 6 + ts011CadToRxSymbols;
+}
+
+simtime_t LogicEndnode::synchronizedWorStart(int spreadingFactor, int channel, int &preambleSymbols)
+{
+    const double symbol = std::pow(2.0, spreadingFactor) / 125000.0;
+    const double period = knownCadPeriodicity;
+    const double now = simTime().dbl();
+    double reference = tRef.dbl();
+    if (channel != lastWorChannel)
+        reference += period / 2.0;
+    double n = std::ceil((now - reference) / period);
+    double next = std::max(reference, reference + n * period);
+    double drift = (ts011RelayClockAccuracyPpm + ts011EndDeviceClockAccuracyPpm) *
+                   std::max(0.0, next - tRef.dbl()) / 1000000.0;
+    if (drift > period) {
+        syncState = Ts011SyncState::UNSYNCHRONIZED;
+        ++syncLosses;
+        preambleSymbols = unsynchronizedPreambleSymbols(spreadingFactor);
+        return simTime();
+    }
+    double start = next - drift / 2.0;
+    if (start <= now + 0.001) {
+        next += period;
+        drift = (ts011RelayClockAccuracyPpm + ts011EndDeviceClockAccuracyPpm) *
+                std::max(0.0, next - tRef.dbl()) / 1000000.0;
+        start = next - drift / 2.0;
+    }
+    preambleSymbols = std::max(8, static_cast<int>(std::floor(drift / symbol)) +
+                                  1 + 6 + ts011CadToRxSymbols);
+    return SimTime(start);
+}
+
+void LogicEndnode::scheduleTs011Wor(int packetId, bool join, bool ackRequired)
+{
+    const int channel = chooseWorChannel();
+    int preamble = unsynchronizedPreambleSymbols(ts011EndDeviceSpreadingFactor);
+    simtime_t start = simTime();
+    if (syncState == Ts011SyncState::SYNCHRONIZED)
+        start = synchronizedWorStart(ts011EndDeviceSpreadingFactor, channel, preamble);
+
+    auto *event = new cMessage("TS011 WOR transmission", SelfMsgType::TS011_SEND_WOR);
+    event->addPar("packetId") = packetId;
+    event->addPar("join") = join;
+    event->addPar("ackRequired") = ackRequired;
+    event->addPar("preambleSymbols") = preamble;
+    event->addPar("worChannel") = channel;
+    scheduleAt(start, event);
+}
+
+void LogicEndnode::sendTs011Wor(cMessage *event)
+{
+    const int packetId = event->par("packetId").longValue();
+    const bool join = event->par("join").boolValue();
+    const bool ackRequired = event->par("ackRequired").boolValue();
+    const int channel = event->par("worChannel").longValue();
+    auto *wor = new LoRaPacket("TS011 WOR", MsgType::MSGWOR);
+    wor->isUplink = true;
+    wor->relayRequired = true;
+    wor->ackRequired = !join;
+    wor->worType = join ? WorType::RELAY_JOIN_REQUEST : WorType::CLASS_A_UPLINK;
+    wor->length = join ? TS011_JOIN_WOR_LENGTH : TS011_UPLINK_WOR_LENGTH;
+    wor->spreadingFactor = ts011EndDeviceSpreadingFactor;
+    wor->preambleSymbols = event->par("preambleSymbols").longValue();
+    wor->channel = channel;
+    wor->worChannel = channel;
+    wor->uplinkChannel = ts011UplinkChannel;
+    wor->worFrameCounter = worFrameCounter++;
+    wor->worValid = uniform(0, 1) <= ts011WorValidityProbability;
+    if (!wor->worValid)
+        ++invalidWorTransmitted;
+    wor->addPar("KeeperIndex") = myKeeperIndex;
+    wor->addPar("PacketId") = packetId;
+    pendingWorCounter = wor->worFrameCounter;
+    pendingWorAcknowledged = false;
+    lastWorPreambleSymbols = wor->preambleSymbols;
+    lastWorChannel = channel;
+    tLast = simTime();
+    const double worDuration = wor->calcMsgDuration();
+    totalWorPreambleSymbols += wor->preambleSymbols;
+    totalWorAirtime += worDuration;
+    send(wor, "logicOut");
+    ++worTransmitted;
+
+    LoRaPacket ackTiming("WOR ACK timing", MsgType::MSGWORACK);
+    ackTiming.length = TS011_WOR_ACK_LENGTH;
+    ackTiming.spreadingFactor = ts011EndDeviceSpreadingFactor;
+    const double delay = worDuration + (join ? ts011WorDataDelay :
+        ts011WorAckDelay + ackTiming.calcMsgDuration() + ts011WorDataDelay);
+    auto *data = new cMessage("TS011 subsequent uplink", SelfMsgType::TS011_SEND_DATA);
+    data->addPar("packetId") = packetId;
+    data->addPar("join") = join;
+    data->addPar("ackRequired") = ackRequired;
+    data->addPar("relayed") = true;
+    scheduleAt(simTime() + delay, data);
+    delete event;
+}
+
+void LogicEndnode::updateTs011MissedAck(unsigned int)
+{
+    if (pendingWorAcknowledged) {
+        consecutiveWorWithoutAck = 0;
+        return;
+    }
+    ++consecutiveWorWithoutAck;
+    if (consecutiveWorWithoutAck < 8)
+        return;
+    consecutiveWorWithoutAck = 0;
+    if (syncState == Ts011SyncState::SYNCHRONIZED) {
+        syncState = Ts011SyncState::UNSYNCHRONIZED;
+        ++syncLosses;
+    }
+    else if (syncState == Ts011SyncState::UNSYNCHRONIZED) {
+        syncState = Ts011SyncState::INITIALIZED;
+        knownCadPeriodicity = 1.0;
+        ts011CadToRxSymbols = 8;
+        ts011RelayClockAccuracyPpm = 40;
     }
 }
 
-void LogicEndnode::updateDaytime()
+void LogicEndnode::sendDataFrame(int packetId, bool join, bool ackRequired, bool relayed)
 {
-    // dayTime w MINUTACH w obrębie doby
-    int64_t timeInMinutesFromStart = simTime().inUnit(SIMTIME_S) / 60;
-    dayTime = timeInMinutesFromStart % (60 * 24);
+    auto *packet = new LoRaPacket(join ? (relayed ? "JOIN RELAY" : "JOIN DIRECT") : "UPLINK",
+                                  join ? MsgType::JOINREQUEST : MsgType::UPLINK);
+    packet->id = packetId;
+    packet->isUplink = true;
+    packet->relayRequired = relayed;
+    packet->ackRequired = join || ackRequired;
+    packet->rxrEligible = relayed;
+    packet->length = join ? (relayed ? RELAY_JOIN_LENGTH : 15) : applicationPayloadLength;
+    packet->spreadingFactor = relayed ? ts011EndDeviceSpreadingFactor : forceSpreadingFactor;
+    packet->channel = relayed ? ts011UplinkChannel : 1;
+    packet->addPar("KeeperIndex") = myKeeperIndex;
+    packet->addPar("PacketId") = packetId;
+    const bool expectResponse = packet->ackRequired;
+    send(packet, "logicOut");
+    keeper->recordMessageTransmission(myKeeperIndex, packetId, true);
+    waitingResponse = expectResponse;
+    if (waitingResponse) {
+        ++lastAckRequestCount;
+        startResponseTimeout();
+    }
+}
+
+void LogicEndnode::startResponseTimeout()
+{
+    if (responseTimer != nullptr) {
+        if (responseTimer->isScheduled())
+            cancelEvent(responseTimer);
+        delete responseTimer;
+    }
+    responseTimer = new cMessage("response timeout", SelfMsgType::RESPONSE_TIMEOUT);
+    scheduleAt(simTime() + REPLAY_TIMEOUT, responseTimer);
+}
+
+void LogicEndnode::handleResponseTimeout(cMessage *msg)
+{
+    responseTimer = nullptr;
+    if (waitingResponse) {
+        waitingResponse = false;
+        ++missedResponse;
+        if (missedResponse >= missedPacketsToSearchRelay) {
+            missedResponse = 0;
+            lastAckRequestCount = 0;
+            updateLogicalState(keeper->hasRelayPath() ? EndDeviceState::JOIN_RELAY : EndDeviceState::OFFLINE);
+        }
+        send(new cMessage("ResetADR", MsgType::RESET_ADR), "logicOut");
+    }
+    delete msg;
+}
+
+void LogicEndnode::handleWorAck(LoRaPacket *packet)
+{
+    if (packet->worFrameCounter == pendingWorCounter) {
+        pendingWorAcknowledged = true;
+        lastAcknowledgedWorCounter = packet->worFrameCounter;
+        consecutiveWorWithoutAck = 0;
+        knownCadPeriodicity = packet->cadPeriodicityMs / 1000.0;
+        ts011CadToRxSymbols = packet->cadToRxSymbols;
+        ts011RelayClockAccuracyPpm = packet->relayClockAccuracyPpm;
+        tRef = tLast + lastWorPreambleSymbols * packet->symbolTime() - packet->tOffsetMs / 1000.0;
+        syncState = Ts011SyncState::SYNCHRONIZED;
+        ++worAckReceived;
+    }
+    delete packet;
+}
+
+void LogicEndnode::handleDownlink(LoRaPacket *packet)
+{
+    if (packet->hasPar("KeeperIndex") && packet->hasPar("PacketId"))
+        keeper->recordDownlinkReception(packet->par("KeeperIndex").longValue(),
+                                        packet->par("PacketId").longValue());
+    missedResponse = 0;
+    waitingResponse = false;
+    lastAckRequestCount = 0;
+    lastAckTime = simTime();
+    if (responseTimer != nullptr) {
+        if (responseTimer->isScheduled())
+            cancelEvent(responseTimer);
+        delete responseTimer;
+        responseTimer = nullptr;
+    }
+    if (packet->getKind() == MsgType::JOINACCEPT) {
+        if (endDeviceState == EndDeviceState::JOIN_RELAY) {
+            updateLogicalState(EndDeviceState::ONLINE_RELAYED);
+            if (syncState == Ts011SyncState::INITIALIZED)
+                syncState = Ts011SyncState::UNSYNCHRONIZED;
+        }
+        else {
+            updateLogicalState(EndDeviceState::ONLINE_DIRECT);
+        }
+    }
+    else if (packet->getKind() == MsgType::TIMEOUT) {
+        updateLogicalState(EndDeviceState::OFFLINE);
+    }
+    delete packet;
 }
 
 void LogicEndnode::recordOnline()
 {
-    double offlineTime = (simTime() - lastOnline).dbl();
-    offlineMax = fmax(offlineMax, offlineTime);
+    const double offlineTime = (simTime() - lastOnline).dbl();
+    offlineMax = std::max(offlineMax, offlineTime);
     offlineTotal += offlineTime;
-
     keeper->recordOfflineTime(myKeeperIndex, offlineTime);
 }
 
-void LogicEndnode::updateLogicalState(EndDeviceState newState)
+void LogicEndnode::updateLogicalState(EndDeviceState state)
 {
-    if (this->endDeviceState != newState)
-        keeper->updateEndnodeState(myKeeperIndex, newState);
-
-    this->endDeviceState = newState;
-    cDisplayString &dString = this->getParentModule()->getDisplayString();
-
-    switch ((short)newState)
-    {
+    if (endDeviceState != state)
+        keeper->updateEndnodeState(myKeeperIndex, state);
+    endDeviceState = state;
+    cDisplayString &display = getParentModule()->getDisplayString();
+    switch (state) {
         case EndDeviceState::OFFLINE:
-            dString.setTagArg("i2",0,"status/excl2");
+            display.setTagArg("i2", 0, "status/excl2");
             lastOnline = simTime();
             break;
-
         case EndDeviceState::JOIN_DIRECT:
-            dString.setTagArg("i2",0,"status/question");
+            display.setTagArg("i2", 0, "status/question");
             break;
-
         case EndDeviceState::JOIN_RELAY:
-            dString.setTagArg("i2",0,"status/bulb");
+            display.setTagArg("i2", 0, "status/bulb");
             break;
-
         case EndDeviceState::ONLINE_DIRECT:
-            dString.setTagArg("i2",0,"status/green");
+            display.setTagArg("i2", 0, "status/green");
             recordOnline();
             break;
-
         case EndDeviceState::ONLINE_RELAYED:
-            dString.setTagArg("i2",0,"status/yellow");
+            display.setTagArg("i2", 0, "status/yellow");
             recordOnline();
             break;
     }
-}
-
-void LogicEndnode::handleParameterChange(const char *parname)
-{
-    // TODO: ewentualne przeładowanie parametrów w runtime
-    EV << "New Parameters: " << (parname ? parname : "<null>");
-    return;
 }
 
 void LogicEndnode::finish()
 {
     recordOnline();
+    recordScalar("TS011 WOR transmitted", worTransmitted);
+    recordScalar("TS011 WOR ACK received", worAckReceived);
+    recordScalar("TS011 synchronization losses", syncLosses);
+    recordScalar("TS011 invalid WOR transmitted", invalidWorTransmitted);
+    recordScalar("TS011 final synchronization state", static_cast<int>(syncState));
+    recordScalar("TS011 mean WOR preamble symbols",
+                 worTransmitted > 0 ? totalWorPreambleSymbols / worTransmitted : 0);
+    recordScalar("TS011 total WOR airtime", totalWorAirtime);
 }
 
 } // namespace opp_lora_relay_official

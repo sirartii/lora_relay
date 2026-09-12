@@ -1,47 +1,81 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
-#ifndef __OPP_LORA_RELAY_OFFICIAL_LOGICRELAY_H_
-#define __OPP_LORA_RELAY_OFFICIAL_LOGICRELAY_H_
+#ifndef OPP_LORA_RELAY_LOGIC_RELAY_H
+#define OPP_LORA_RELAY_LOGIC_RELAY_H
 
 #include <omnetpp.h>
 
-using namespace omnetpp;
+#include <unordered_map>
+
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
-/**
- * TODO - Generated class
- */
-class LogicRelay : public cSimpleModule, public cListener
+class LoRaPacket;
+
+class LogicRelay : public omnetpp::cSimpleModule
 {
-
   protected:
-    virtual void initialize() override;
-    virtual void handleMessage(cMessage *msg) override;
-    //virtual void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
-    //virtual void receiveSignal(cComponent *src, simsignal_t id, intval_t value, cObject *details) override;
-    //virtual void receiveSignal(cComponent *src, simsignal_t id, bool value, cObject *details) override;
-    virtual void receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details) override;
-  private:
-    simtime_t lastPacketReceive;
-    simsignal_t wakeupRelay;
-    float RXR_delay;
+    void initialize() override;
+    void handleMessage(omnetpp::cMessage *msg) override;
+    void finish() override;
 
+  private:
+    struct TokenBucket {
+        double tokens = 0;
+        double reloadRate = -1;
+        double capacity = 0;
+        omnetpp::simtime_t lastReload;
+
+        void configure(double rate, double size, omnetpp::simtime_t now);
+        void reload(omnetpp::simtime_t now);
+        bool available(omnetpp::simtime_t now);
+        bool consume(omnetpp::simtime_t now);
+        double secondsUntilToken(omnetpp::simtime_t now);
+    };
+
+    struct WorContext {
+        int channel = 1;
+        int uplinkChannel = 1;
+        unsigned int counter = 0;
+        omnetpp::simtime_t receivedAt;
+    };
+
+    bool canForward(int deviceId, bool joinRequest, bool consume);
+    int forwardingStatus(int deviceId);
+    TokenBucket &deviceBucket(int deviceId);
+    void handleWor(LoRaPacket *packet);
+    void handleAccessUplink(LoRaPacket *packet);
+    void handleForwardDownlink(LoRaPacket *packet);
+
+    RetransmissionModel model = RetransmissionModel::UNKNOWN;
+    double worAckDelay = 1;
+    double relayForwardDelay = 1;
+    double rxrDelay = 7;
+    double worAckProbability = 1;
+    int cadPeriodicityMs = 1000;
+    int cadToRxSymbols = 8;
+    int relayClockAccuracyPpm = 40;
+    int relaySpreadingFactor = 9;
+    int relayUplinkChannel = 3;
+    int rxrChannel = 1;
+    int maximumForwardedPayload = 222;
+    bool forwardingEnabled = true;
+
+    double perDeviceRate = -1;
+    double perDeviceCapacity = 0;
+    TokenBucket joinBucket;
+    TokenBucket aggregateTrustedBucket;
+    TokenBucket globalBucket;
+    std::unordered_map<int, TokenBucket> perDeviceBuckets;
+    std::unordered_map<int, WorContext> worContexts;
+
+    long worReceived = 0;
+    long worAcknowledged = 0;
+    long uplinksForwarded = 0;
+    long downlinksForwarded = 0;
+    long forwardingLimitDrops = 0;
+    long payloadLimitDrops = 0;
 };
 
-} //namespace
+} // namespace opp_lora_relay_official
 
 #endif

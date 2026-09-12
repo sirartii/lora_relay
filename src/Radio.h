@@ -1,140 +1,160 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
-#ifndef __OPP_LORA_RELAY_OFFICIAL_SOURCE_H
-#define __OPP_LORA_RELAY_OFFICIAL_SOURCE_H
+#ifndef OPP_LORA_RELAY_RADIO_H
+#define OPP_LORA_RELAY_RADIO_H
 
 #include <omnetpp.h>
-#include "Keeper.h"
-#include "LogicEndnode.h"
-#include <math.h>       /* log10 */
+
 #include <list>
-#include "common.h"
+#include <string>
+
+#include "Keeper.h"
 #include "LoRaPacket.h"
-using namespace omnetpp;
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
-//char *RadioActivityTypes[] = { "UNKNOWN", "RADIOOFF", "LISTENING", "RECEIVING", "TRANSMITTING", "TIMER" };
-//char *RadioMessageTypes[] = { "JOIN_REQUEST", "RELAY_JOIN_REQUEST", "DATA_FRAME"}
-
-enum RadioFrameType {
-    JOIN_REQUEST = 0,
-    RELAY_JOIN_REQUEST = 1,
-    DATA_FRAME = 2,
-};
-
-class Radio : public cSimpleModule, public cListener
+class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
 {
-public:
-    bool isListening();
+  public:
+    Radio() = default;
+    virtual ~Radio();
+
+    bool isListening() const;
     bool isOffOrUnknown() const noexcept;
+    bool acceptsAirDelivery(const LoRaPacket *packet) const;
+    DevType getDeviceType() const noexcept { return deviceType; }
 
-protected:
-    virtual void initialize() override;
-    virtual void handleMessage(cMessage *msg) override;
-    virtual void receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details) override;
-    virtual void finish() override;
-    using omnetpp::cListener::finish;       //in order not to override finish from cListener
+  protected:
+    virtual DevType configuredDeviceType() const = 0;
+    virtual void updateIdleRadioState() = 0;
+    virtual bool roleAcceptsPacket(const LoRaPacket *packet) const;
 
-    bool isReceivedCorrectly(cMessage *msg, double rssi);
+    void initialize() override;
+    void handleMessage(omnetpp::cMessage *msg) override;
+    void receiveSignal(omnetpp::cComponent *src, omnetpp::simsignal_t id,
+                       double value, omnetpp::cObject *details) override;
+    void finish() override;
+    using omnetpp::cListener::finish;
+
+    void updateRadio();
+    void sendToNetwork(LoRaPacket *msg);
+    void directSendWithDelete(LoRaPacket *msg);
+    void receiveFromNetwork(LoRaPacket *msg);
+    void dropByCollision(LoRaPacket *packet);
+    void updateRadioActivity(RadioActivity::ra activity);
+    void updateDaytime();
+    void openClassAWindow(int index, omnetpp::cMessage *timer);
+    void scheduleClassAReception(bool includeRxr);
+    bool relayScanOverlaps(const LoRaPacket *packet, omnetpp::simtime_t *scanTime = nullptr) const;
     double getRssi(LoRaPacket *msg);
     double calculateReceivedPower(float pSend, double distance);
-    void updateRadio();
-    void setRadioStatus(cMessage *msg);
-    void updateDaytime();
-    void sendToNetwork(LoRaPacket *msg);
-    void receiveFromNetwork(LoRaPacket *msg);
-    void directSendWithDelete(LoRaPacket *msg);
 
-//    void setRadioBusyDuration(cMessage *msg, RadioActivity::ra rae);
-    void updateRadioActivity(RadioActivity::ra newRA);
-    void dropByCollision(LoRaPacket* lp);
-    static inline double readCoord(cModule* m, const char* name, int tagIndex);
+    Keeper *keeper = nullptr;
+    int myKeeperIndex = -1;
+    DevType deviceType = DevType::DEVUNKNOWN;
+    RetransmissionModel retransmissionModel = RetransmissionModel::UNKNOWN;
+    RadioActivity::ra radioActivity = RadioActivity::UNKNOWN;
+    Coords position{0, 0};
+    std::string moduleLabel;
 
-    double rssiOfCurrentReceive;
-    DevType deviceType;
-    RadioActivity::ra radioActivity;
-    RetransmissionModel retransmissionModel;
+    double sensitivity = -114;
+    double txPower = 14;
+    int dayTime = 0;
+    omnetpp::simtime_t busyUntil;
+    omnetpp::simtime_t relayListeningUntil;
+    omnetpp::simtime_t relayExpectedUplinkUntil;
+    int relayExpectedDataChannel = 1;
+    int activeReceiveChannel = 1;
+    int lastSpreadingFactor = 12;
+    int collisionCount = 0;
+    double rssiOfCurrentReceive = -200;
+    bool disableClassAWindows = false;
+    bool rxrPending = false;
+    bool downlinkReceivedInClassA = false;
 
-    Keeper *keeper;
-    int myKeeperIndex;
+    int listeningWindowStart1 = 0;
+    int listeningWindowStart2 = 0;
+    int listeningWindowDuration1 = 0;
+    int listeningWindowDuration2 = 0;
+    double listeningWindowRX1 = 1;
+    double listeningWindowRX2 = 1;
+    double listeningWindowRXR = 1;
+    double listeningWindowRXC = 1;
+    double listeningWindowRXCR = 3;
 
-    Coords position;
-    double txPower;
-    double sensitivity;
-    int dayTime;
-    simtime_t busyUntil;
-    std::string tmp_name;
+    int ts011DefaultWorChannel = 1;
+    int ts011SecondWorChannel = 2;
+    bool ts011SecondChannelEnabled = false;
+    int ts011Rx2Channel = 1;
+    int ts011RxrChannel = 1;
+    double ts011CadPeriodicity = 1;
+    int ts011CadToRxSymbols = 8;
+    int ts011ChannelScanSymbols = 8;
+    double ts011WorAckDelay = 1;
+    double ts011WorDataDelay = 1;
+    double ts011WorAckWindow = 1;
+    double ts011UplinkListenTimeout = 8;
+
+    LoRaPacket *currentRcvMessage = nullptr;
+    omnetpp::cMessage *radioRXTimer = nullptr;
+    omnetpp::cMessage *radioUpdateReceive = nullptr;
+    omnetpp::cMessage *timerListeningWindowStart1 = nullptr;
+    omnetpp::cMessage *timerListeningWindowStop1 = nullptr;
+    omnetpp::cMessage *timerListeningWindowStart2 = nullptr;
+    omnetpp::cMessage *timerListeningWindowStop2 = nullptr;
     std::list<LoRaPacket> sendQueue;
-    bool listeningWindowRXRactive;
-    bool disableLAT;
-    int collisionCount;
-    int lastSpreadingFactor;
 
-//    cMessage *radioRX1Timer;
-//    cMessage *radioRX2Timer;
-    cMessage *radioRXTimer;
-    cMessage *timer_listeningWindowStart1;
-    cMessage *timer_listeningWindowStop1;
-    cMessage *timer_listeningWindowStart2;
-    cMessage *timer_listeningWindowStop2;
-
-    LoRaPacket *currentRcvMessage;
-
-    int listeningWindowStart1;
-    int listeningWindowStart2;
-    int listeningWindowDuration1;
-    int listeningWindowDuration2;
-
-    double listeningWindowRX1;
-    double listeningWindowRX2;
-    double listeningWindowRXR;
-    double listeningWindowRXC;
-    double listeningWindowRXCR;
-
-    //cOutVector radioStatusVector;
-    //cOutVector energyConsumptionVector;
-
-    double currentConsumptionRx;
-    double currentConsumptionTx;
-    double currentConsumptionIdle;
-    double currentConsumptionWOR;
-    double currentConsumptionBaseOffset;
-    double lteAttachEnergyMAs;
-    double lteTransmitEnergyMAs;
-
-    double energyConsumptionRx;
-    double energyConsumptionTx;
-    double energyConsumptionIdle;
-    double energyConsumptionWOR;
-    double energyConsumptionBaseOffset;
-    double energyConsumptionLteAttach;
-    double energyConsumptionLteTransmit;
-    long lteAttachCount;
-    long lteTransmitCount;
-
-    simsignal_t wakeupRelay;
-    simtime_t relayListeningUntil;
-    simtime_t lastRadioActivityChange;
-    cMessage *radioUpdateReceive;
-
+    double currentConsumptionRx = 0;
+    double currentConsumptionTx = 0;
+    double currentConsumptionIdle = 0;
+    double currentConsumptionWOR = 0;
+    double currentConsumptionBaseOffset = 0;
+    double lteAttachEnergyMAs = 0;
+    double lteTransmitEnergyMAs = 0;
+    double energyConsumptionRx = 0;
+    double energyConsumptionTx = 0;
+    double energyConsumptionIdle = 0;
+    double energyConsumptionWOR = 0;
+    double energyConsumptionBaseOffset = 0;
+    double energyConsumptionLteAttach = 0;
+    double energyConsumptionLteTransmit = 0;
+    long lteAttachCount = 0;
+    long lteTransmitCount = 0;
+    omnetpp::simtime_t lastRadioActivityChange;
+    omnetpp::simsignal_t wakeupRelay;
 };
 
-}
-;
-// namespace
+class GatewayRadio : public Radio
+{
+  protected:
+    DevType configuredDeviceType() const override { return DevType::GATEWAY; }
+    void updateIdleRadioState() override;
+    bool roleAcceptsPacket(const LoRaPacket *packet) const override;
+};
+
+class EndDeviceRadio : public Radio
+{
+  protected:
+    DevType configuredDeviceType() const override { return DevType::ENDNODE; }
+    void updateIdleRadioState() override;
+    bool roleAcceptsPacket(const LoRaPacket *packet) const override;
+};
+
+class RelayRadio : public Radio
+{
+  protected:
+    DevType configuredDeviceType() const override { return DevType::RELAY; }
+    void updateIdleRadioState() override;
+    bool roleAcceptsPacket(const LoRaPacket *packet) const override;
+};
+
+class IpBridgeRadio : public Radio
+{
+  protected:
+    DevType configuredDeviceType() const override { return DevType::IPBRIDGE; }
+    void updateIdleRadioState() override;
+    bool roleAcceptsPacket(const LoRaPacket *packet) const override;
+};
+
+} // namespace opp_lora_relay_official
 
 #endif

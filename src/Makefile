@@ -34,7 +34,6 @@ O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
 OBJS = \
-    $O/Distortion.o \
     $O/Keeper.o \
     $O/LNS.o \
     $O/LogicEndnode.o \

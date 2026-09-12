@@ -17,6 +17,7 @@
 #define LORAPACKET_H_
 
 #include <omnetpp/cpacket.h>
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
@@ -31,11 +32,13 @@ public:
     double CalculateCADLength(int SpreadingFactor);
     int calcBitrate();
     float calcSensitivity();
-    int calcMsgPreamble();
-    int isWOR();
+    int calcMsgPreamble() const;
+    bool isWOR() const;
+    bool isWorAck() const;
     int autodetectUplink();
-    float calcMsgDuration();
-    std::string GetPacketName();
+    float calcMsgDuration() const;
+    double symbolTime() const;
+    std::string GetPacketName() const;
 
 
     virtual ~LoRaPacket();
@@ -44,16 +47,41 @@ public:
     bool isRelayed;
     bool ackRequired;
     bool relayRequired;
+    bool encapsulated;
+    bool worValid;
+    bool rxrEligible;
 
 
     unsigned char id;
     unsigned char length;
     unsigned char channel;
+    unsigned char worChannel;
+    unsigned char uplinkChannel;
+    unsigned char originalKind;
+    unsigned char originalLength;
+    unsigned char originalSpreadingFactor;
+    unsigned char fPort;
+
+    WorType worType;
+    unsigned int worFrameCounter;
+    int preambleSymbols;
+    int cadPeriodicityMs;
+    int cadToRxSymbols;
+    int relayClockAccuracyPpm;
+    int tOffsetMs;
+    int forwardStatus;
+    int relayDataRate;
+    int forwardingRelayId;
 
     float transmissionPower;
     short spreadingFactor;
     float rssi;
     float rssi_margin;
+    float snr;
+    float uplinkRssiMetadata;
+    float uplinkSnrMetadata;
+    float uplinkSenderPositionX;
+    float uplinkSenderPositionY;
 
     float senderPositionX;
     float senderPositionY;
@@ -65,6 +93,3 @@ public:
 } /* namespace opp_lora_relay_official */
 
 #endif /* LORAPACKET_H_ */
-
-
-

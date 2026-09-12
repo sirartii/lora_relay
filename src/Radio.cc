@@ -1,80 +1,48 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "Radio.h"
-#include "LoRaPacket.h"
+
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace opp_lora_relay_official {
 
-Define_Module(Radio);
+Define_Module(GatewayRadio);
+Define_Module(EndDeviceRadio);
+Define_Module(RelayRadio);
+Define_Module(IpBridgeRadio);
+
+Radio::~Radio()
+{
+    auto dispose = [this](omnetpp::cMessage *message) {
+        if (message != nullptr) {
+            if (message->isScheduled())
+                cancelEvent(message);
+            delete message;
+        }
+    };
+    dispose(radioRXTimer);
+    dispose(radioUpdateReceive);
+    dispose(timerListeningWindowStart1);
+    dispose(timerListeningWindowStop1);
+    dispose(timerListeningWindowStart2);
+    dispose(timerListeningWindowStop2);
+    delete currentRcvMessage;
+}
 
 void Radio::initialize()
 {
-    listeningWindowRXRactive = true;
-    cModule *parent = getParentModule();
-    std::string s = parent->getName();
-    tmp_name = parent->getFullName();
-    int index = -1;
-    if (parent->isVector())
-        index = parent->getIndex();
+    deviceType = configuredDeviceType();
+    cModule *host = getParentModule();
+    moduleLabel = host->getFullName();
+    const int index = host->isVector() ? host->getIndex() : -1;
+    keeper = check_and_cast<Keeper *>(host->getParentModule()->getSubmodule("keeper"));
+    myKeeperIndex = keeper->registerMe(host->getName(), index, deviceType, this);
 
-    std::cout << s << std::endl;
-    keeper = check_and_cast<Keeper*>(parent->getParentModule()->getSubmodule("keeper"));
-
-    if (s.rfind("endnode", 0) == 0) {
-        deviceType = DevType::ENDNODE;
-        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
-        //(check_and_cast<LogicEndnode*>(parent->getParentModule()))->myKeeperIndex = myKeeperIndex;
-    }
-    else if (s.rfind("relay", 0) == 0) {
-        deviceType = DevType::RELAY;
-        myKeeperIndex =keeper->registerMe(s, index, deviceType, this);
-    }
-    else if (s.rfind("gateway", 0) == 0) {
-        deviceType = DevType::GATEWAY;
-        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
-    }
-    else if (s.rfind("ipbridge", 0) == 0 || s.rfind("ipb", 0) == 0) {
-        deviceType = DevType::IPBRIDGE;               // lub nowy typ jeśli chcesz
-        myKeeperIndex = keeper->registerMe(s, index, deviceType, this);
-    }
-    else {
-        deviceType = DevType::DEVUNKNOWN;
-    }
-
-
-
-    cModule* host = this->getParentModule();
     position.x = host->par("xpos").doubleValue();
     position.y = host->par("ypos").doubleValue();
-
-
     sensitivity = par("sensitivityAllRadios").doubleValue();
     txPower = par("txPower").doubleValue();
-    cMessage *radioInit = new cMessage("radioInit");
-    radioInit->setKind(SelfMsgType::RADIOINIT);
-    scheduleAt(simTime(), radioInit);
-
-    radioActivity = RadioActivity::UNKNOWN;
-    updateRadioActivity(RadioActivity::RADIOOFF);
-
-    radioRXTimer = new cMessage("radioUpdate-RXTimer");
-    radioRXTimer->addPar("windowIndex") = 0;
-    retransmissionModel = (RetransmissionModel) par("retransmissionModel").intValue();
-
+    retransmissionModel = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
 
     listeningWindowStart1 = par("listeningWindowStart1").intValue();
     listeningWindowStart2 = par("listeningWindowStart2").intValue();
@@ -86,6 +54,21 @@ void Radio::initialize()
     listeningWindowRXC = par("listeningWindowRXC").doubleValue();
     listeningWindowRXCR = par("listeningWindowRXCR").doubleValue();
 
+    ts011DefaultWorChannel = par("ts011DefaultWorChannel").intValue();
+    ts011SecondWorChannel = par("ts011SecondWorChannel").intValue();
+    ts011SecondChannelEnabled = par("ts011SecondChannelEnabled").boolValue();
+    ts011Rx2Channel = par("ts011Rx2Channel").intValue();
+    ts011RxrChannel = par("ts011RxrChannel").intValue();
+    ts011CadPeriodicity = par("ts011CadPeriodicity").doubleValue();
+    ts011CadToRxSymbols = par("ts011CadToRxSymbols").intValue();
+    ts011ChannelScanSymbols = par("ts011ChannelScanSymbols").intValue();
+    ts011WorAckDelay = par("ts011WorAckDelay").doubleValue();
+    ts011WorDataDelay = par("ts011WorDataDelay").doubleValue();
+    ts011WorAckWindow = par("ts011WorAckWindow").doubleValue();
+    ts011UplinkListenTimeout = par("ts011UplinkListenTimeout").doubleValue();
+    if (ts011CadPeriodicity <= 0 || ts011ChannelScanSymbols <= 0)
+        throw cRuntimeError("TS011 CAD periodicity and channel scan length must be positive");
+
     currentConsumptionRx = par("currentConsumptionRx").doubleValue();
     currentConsumptionTx = par("currentConsumptionTx").doubleValue();
     currentConsumptionIdle = par("currentConsumptionIdle").doubleValue();
@@ -94,750 +77,602 @@ void Radio::initialize()
     lteAttachEnergyMAs = par("lteAttachEnergyMAs").doubleValue();
     lteTransmitEnergyMAs = par("lteTransmitEnergyMAs").doubleValue();
 
-    energyConsumptionRx = 0;
-    energyConsumptionTx = 0;
-    energyConsumptionIdle = 0;
-    energyConsumptionWOR = 0;
-    energyConsumptionBaseOffset = 0;
-    energyConsumptionLteAttach = 0;
-    energyConsumptionLteTransmit = 0;
-    lteAttachCount = 0;
-    lteTransmitCount = 0;
+    radioRXTimer = new cMessage("classAReceiveTimer");
+    radioRXTimer->addPar("windowIndex") = 0;
+    radioActivity = RadioActivity::UNKNOWN;
+    updateRadioActivity(RadioActivity::RADIOOFF);
+    rssiOfCurrentReceive = sensitivity - 1;
+    lastSpreadingFactor = 12;
+    wakeupRelay = registerSignal("wakeupRelay");
 
-    collisionCount = 0;
+    if (deviceType == DevType::RELAY || deviceType == DevType::IPBRIDGE)
+        getSimulation()->getSystemModule()->subscribe("wakeupRelay", this);
 
-    busyUntil = -1;
-    if (deviceType != DevType::GATEWAY && deviceType != DevType::RELAY &&
-            deviceType != DevType::IPBRIDGE) {
-        timer_listeningWindowStart1 = new cMessage("listeningWindowStart1");
-        timer_listeningWindowStart1->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart1 * 60, timer_listeningWindowStart1);
-
-        timer_listeningWindowStop1 = new cMessage("listeningWindowStop1");
-        timer_listeningWindowStop1->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart1 * 60 + listeningWindowDuration1 * 60, timer_listeningWindowStop1);
-
-        timer_listeningWindowStart2 = new cMessage("listeningWindowStart2");
-        timer_listeningWindowStart2->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart2 * 60, timer_listeningWindowStart2);
-
-        timer_listeningWindowStop2 = new cMessage("listeningWindowStop2");
-        timer_listeningWindowStop2->setKind(SelfMsgType::WINDOWTIMER);
-        scheduleAt(simTime() + listeningWindowStart2 * 60 + listeningWindowDuration2 * 60, timer_listeningWindowStop2);
+    if (deviceType == DevType::ENDNODE) {
+        timerListeningWindowStart1 = new cMessage("dailyRxStart1", SelfMsgType::WINDOWTIMER);
+        timerListeningWindowStop1 = new cMessage("dailyRxStop1", SelfMsgType::WINDOWTIMER);
+        timerListeningWindowStart2 = new cMessage("dailyRxStart2", SelfMsgType::WINDOWTIMER);
+        timerListeningWindowStop2 = new cMessage("dailyRxStop2", SelfMsgType::WINDOWTIMER);
+        scheduleAt(simTime() + listeningWindowStart1 * 60, timerListeningWindowStart1);
+        scheduleAt(simTime() + (listeningWindowStart1 + listeningWindowDuration1) * 60,
+                   timerListeningWindowStop1);
+        scheduleAt(simTime() + listeningWindowStart2 * 60, timerListeningWindowStart2);
+        scheduleAt(simTime() + (listeningWindowStart2 + listeningWindowDuration2) * 60,
+                   timerListeningWindowStop2);
     }
 
-    WATCH(busyUntil);
     WATCH(radioActivity);
     WATCH(collisionCount);
-
     WATCH(energyConsumptionRx);
     WATCH(energyConsumptionTx);
     WATCH(energyConsumptionIdle);
+    WATCH(energyConsumptionWOR);
     WATCH(energyConsumptionBaseOffset);
-    if (deviceType == DevType::RELAY)
-        WATCH(energyConsumptionWOR);
-    if (deviceType == DevType::IPBRIDGE) {
-        WATCH(energyConsumptionLteAttach);
-        WATCH(energyConsumptionLteTransmit);
-        WATCH(lteAttachCount);
-        WATCH(lteTransmitCount);
-    }
+    WATCH(activeReceiveChannel);
 
-    rssiOfCurrentReceive = sensitivity-1;
-    currentRcvMessage = nullptr;
-    radioUpdateReceive = nullptr;
-
-
-    wakeupRelay = registerSignal("wakeupRelay");
-    relayListeningUntil = SIMTIME_ZERO;
-    lastSpreadingFactor = 12;
-
-    if(deviceType == DevType::RELAY || deviceType == DevType::IPBRIDGE)
-        getSimulation()->getSystemModule()->subscribe("wakeupRelay", this);
+    scheduleAt(simTime(), new cMessage("radioInit", SelfMsgType::RADIOINIT));
 }
+
 void Radio::handleMessage(cMessage *msg)
 {
     updateDaytime();
-    //LoRaPacket *timeoutPkt;
-    cGate *arrivalGate = msg->getArrivalGate();
-
     if (msg->isSelfMessage()) {
         switch (msg->getKind()) {
             case SelfMsgType::RADIOINIT:
-                EV << simTime() << " RADIOINIT \n";
                 updateRadio();
                 delete msg;
-                break;
+                return;
             case SelfMsgType::WINDOWTIMER:
-                EV << simTime() << " WINDOWTIMER \n";
                 scheduleAt(simTime() + 24 * 3600, msg);
                 updateRadio();
-                break;
-            case SelfMsgType::TXTIMER:
-                EV << simTime() << " TXTIMER \n";
-                getParentModule()->getDisplayString().setTagArg("r",0,"0");
+                return;
+            case SelfMsgType::TXTIMER: {
+                const int txKind = msg->par("txKind").longValue();
+                const int txChannel = msg->par("txChannel").longValue();
+                const bool ackExpected = msg->par("worAckExpected").boolValue();
+                const bool includeRxr = msg->par("includeRxr").boolValue();
+                getParentModule()->getDisplayString().setTagArg("r", 0, "0");
+                updateIdleRadioState();
+                if (txKind == MsgType::MSGWOR) {
+                    if (ackExpected) {
+                        auto *open = new cMessage("worAckRxOpen", SelfMsgType::WORACK_RX_OPEN);
+                        scheduleAt(simTime() + ts011WorAckDelay, open);
+                    }
+                }
+                else if (deviceType != DevType::GATEWAY && txKind != MsgType::MSGWORACK &&
+                         !disableClassAWindows) {
+                    activeReceiveChannel = txChannel;
+                    scheduleClassAReception(includeRxr);
+                }
+                disableClassAWindows = false;
+                delete msg;
+                return;
+            }
+            case SelfMsgType::WORACK_RX_OPEN: {
+                updateRadioActivity(RadioActivity::LISTENING);
+                activeReceiveChannel = msg->hasPar("channel") ? msg->par("channel").longValue() : activeReceiveChannel;
+                auto *close = new cMessage("worAckRxClose", SelfMsgType::WORACK_RX_CLOSE);
+                scheduleAt(simTime() + ts011WorAckWindow, close);
+                delete msg;
+                return;
+            }
+            case SelfMsgType::WORACK_RX_CLOSE:
                 updateRadio();
                 delete msg;
-                if (deviceType != DevType::GATEWAY && !disableLAT)
-                {
-                    radioRXTimer->par("windowIndex") = 1;
-                    radioRXTimer->setKind(SelfMsgType::RXC);
-                    if (!radioRXTimer->isScheduled())
-                        scheduleAt(simTime() + listeningWindowRXC, radioRXTimer);
-                }
-                disableLAT = false;
-                break;
+                return;
             case SelfMsgType::RXC:
-                EV << simTime() << " RXC \n";
-                if ((int) msg->par("windowIndex") == 1) {
-                    EV << simTime() << " RXC windowIndex 1 \n";
-                    updateRadioActivity(RadioActivity::LISTENING);
-                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RX1");        //display bubble
-                    msg->setKind(SelfMsgType::RX1);
-                    scheduleAt(simTime() + listeningWindowRX1, msg);
-                }
-                if ((int) msg->par("windowIndex") == 2) {
-                    EV << simTime() << " RXC windowIndex 2 \n";
-                    updateRadioActivity(RadioActivity::LISTENING);
-                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RX2");        //display bubble
-                    msg->setKind(SelfMsgType::RX2);
-                    scheduleAt(simTime() + listeningWindowRX2, msg);
-                }
-                if ((int) msg->par("windowIndex") == 3) {
-                    EV << simTime() << " RXCR windowIndex 3 \n";
-                    updateRadioActivity(RadioActivity::LISTENING);
-                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening RXR");        //display bubble
-                    msg->setKind(SelfMsgType::RXR);
-                    scheduleAt(simTime() + listeningWindowRXR, msg);
-                }
-                break;
+                openClassAWindow(msg->par("windowIndex").longValue(), msg);
+                return;
             case SelfMsgType::RX1:
-                EV << simTime() << " RX1 \n";
-                getParentModule()->getDisplayString().setTagArg("t",0,"...");        //display bubble
                 updateRadio();
-                msg->par("windowIndex") = 2;
                 msg->setKind(SelfMsgType::RXC);
+                msg->par("windowIndex") = 2;
                 scheduleAt(simTime() + listeningWindowRXC, msg);
-                break;
+                return;
             case SelfMsgType::RX2:
-                EV << simTime() << " RX2 \n";
-                getParentModule()->getDisplayString().setTagArg("t",0,"...");        //display bubble
                 updateRadio();
-                if (listeningWindowRXRactive) {
-                    msg->par("windowIndex") = 3;
+                if (rxrPending && !downlinkReceivedInClassA) {
                     msg->setKind(SelfMsgType::RXC);
+                    msg->par("windowIndex") = 3;
                     scheduleAt(simTime() + listeningWindowRXCR, msg);
                 }
                 else {
                     msg->par("windowIndex") = 0;
-                    if (sendQueue.size() > 0) {
-                        sendToNetwork(NULL);
-                    }
+                    if (!sendQueue.empty())
+                        sendToNetwork(nullptr);
                 }
-                break;
+                return;
             case SelfMsgType::RXR:
-                EV << simTime() << " RXR \n";
-                getParentModule()->getDisplayString().setTagArg("t",0,"");
                 updateRadio();
-
-                /*
-                timeoutPkt = new LoRaPacket("timeout",0);
-                timeoutPkt->setKind(MsgType::TIMEOUT);
-                sendToNetwork(timeoutPkt);
-                */
-
-                if (sendQueue.size() > 0) {
-                    sendToNetwork(NULL);
-                }
+                rxrPending = false;
+                if (!sendQueue.empty())
+                    sendToNetwork(nullptr);
                 if (msg != radioRXTimer)
                     delete msg;
-                break;
-
-            //Below case indicate that the message was correctly received. No disruption during transmission.
+                return;
+            case SelfMsgType::RELAY_RX_TIMEOUT:
+                updateRadio();
+                delete msg;
+                return;
             case SelfMsgType::RXTIMER:
-                if (currentRcvMessage != nullptr){
+                if (currentRcvMessage != nullptr) {
                     if (deviceType == DevType::IPBRIDGE && currentRcvMessage->isUplink &&
-                            currentRcvMessage->relayRequired) {
-                        // The thesis models LTE Cat-M1 as an on-demand session:
-                        // one attach followed by one IP uplink for every LoRa
-                        // frame actually received and forwarded by the bridge.
+                        currentRcvMessage->relayRequired) {
                         energyConsumptionLteAttach += lteAttachEnergyMAs;
                         energyConsumptionLteTransmit += lteTransmitEnergyMAs;
-                        lteAttachCount++;
-                        lteTransmitCount++;
+                        ++lteAttachCount;
+                        ++lteTransmitCount;
                     }
+                    if (!currentRcvMessage->isUplink && !currentRcvMessage->isWorAck())
+                        downlinkReceivedInClassA = true;
                     send(currentRcvMessage, "toLogic");
-                    EV << "RADIO " << tmp_name << " t=" << simTime() << " rcv ok, sending to logic\n";
-
-                    if (par("forceSF").intValue() == -1 && currentRcvMessage->getKind() == MsgType::ACK)        //ADR en
-                    {
-                        if (currentRcvMessage->hasPar("ADR+") && lastSpreadingFactor < 12)
-                            lastSpreadingFactor++;
-                        if (currentRcvMessage->hasPar("ADR-") && lastSpreadingFactor > 7)
-                            lastSpreadingFactor--;
-                    }
+                    currentRcvMessage = nullptr;
                 }
-
-                getParentModule()->getDisplayString().setTagArg("t",0,"");
-                if (sendQueue.size() > 0) {
-                    sendToNetwork(NULL);
-                }
-                else {
+                radioUpdateReceive = nullptr;
+                rssiOfCurrentReceive = sensitivity - 1;
+                if (!sendQueue.empty())
+                    sendToNetwork(nullptr);
+                else
                     updateRadio();
-                }
-
-
-
-                currentRcvMessage = nullptr;
-                delete msg;         //special object was created for the event so it's time to remove unused object
-                break;
-
-            //case SelfMsgType::
-
-            default:
-                EV << tmp_name << " default \n";
                 delete msg;
-                break;
+                return;
+            default:
+                delete msg;
+                return;
         }
     }
-    else if (strcmp(arrivalGate->getName(), "fromLogic") == 0) {
-        if (msg->getKind() == MsgType::RESET_ADR)
-        {
+
+    if (msg->arrivedOn("fromLogic")) {
+        if (msg->getKind() == MsgType::RESET_ADR) {
             if (lastSpreadingFactor < 12)
-                lastSpreadingFactor++;
+                ++lastSpreadingFactor;
             delete msg;
             return;
         }
-
-
-        if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
-        {
-            if(msg->getKind() == MsgType::JOINREQUEST)                  //wyzeruj ADR
-                lastSpreadingFactor = 12;
-            sendToNetwork((LoRaPacket*)msg);
+        auto *packet = dynamic_cast<LoRaPacket *>(msg);
+        if (packet == nullptr) {
+            delete msg;
+            return;
         }
-        else
-            //TODO: control messages to enable radio listen etc
-            EV << "RADIO " << tmp_name << " Got unknown packet to send " << this->getParentModule()->getFullName() << " \n";
-
-    }
-    else if (strcmp(arrivalGate->getName(), "radioIn") == 0) {
-        if (dynamic_cast<LoRaPacket*>(msg) != nullptr)
-            receiveFromNetwork((LoRaPacket*)msg);
-        else
-            EV << "RADIO " << tmp_name << " t="<< simTime() <<" Got unknown packet via radio " << this->getParentModule()->getFullName() << " \n";
+        if (packet->getKind() == MsgType::JOINREQUEST)
+            lastSpreadingFactor = 12;
+        sendToNetwork(packet);
+        return;
     }
 
+    if (msg->arrivedOn("radioIn")) {
+        auto *packet = dynamic_cast<LoRaPacket *>(msg);
+        if (packet != nullptr)
+            receiveFromNetwork(packet);
+        else
+            delete msg;
+        return;
+    }
+
+    delete msg;
 }
-void Radio::receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)
+
+void Radio::openClassAWindow(int index, cMessage *timer)
 {
-    if (id == wakeupRelay &&
-            (deviceType == DevType::RELAY || deviceType == DevType::IPBRIDGE) &&
-            retransmissionModel == RetransmissionModel::EP431)
-    {
-        Enter_Method("receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details)");
-        const simtime_t listenUntil = simTime() + value;
-        if (listenUntil > relayListeningUntil)
-            relayListeningUntil = listenUntil;
-        scheduleAt(listenUntil, new cMessage("Relay listen timeout", SelfMsgType::RXR));
-
-        if ((radioActivity != RadioActivity::RECEIVING) and (radioActivity != RadioActivity::TRANSMITTING))
-        {
-            updateRadioActivity(RadioActivity::LISTENING);
-            getParentModule()->getDisplayString().setTagArg("t",0,"Listening rly");               //unable to execute gui command (wrong thered?)
-            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "RL enabled to listen for ED\n";
-        }
-    }
+    updateRadioActivity(RadioActivity::LISTENING);
+    timer->setKind(index == 1 ? SelfMsgType::RX1 : index == 2 ? SelfMsgType::RX2 : SelfMsgType::RXR);
+    if (index == 2)
+        activeReceiveChannel = ts011Rx2Channel;
+    else if (index == 3)
+        activeReceiveChannel = ts011RxrChannel;
+    const double duration = index == 1 ? listeningWindowRX1 : index == 2 ? listeningWindowRX2 : listeningWindowRXR;
+    scheduleAt(simTime() + duration, timer);
 }
+
+void Radio::scheduleClassAReception(bool includeRxr)
+{
+    if (radioRXTimer->isScheduled())
+        cancelEvent(radioRXTimer);
+    rxrPending = includeRxr;
+    downlinkReceivedInClassA = false;
+    radioRXTimer->setKind(SelfMsgType::RXC);
+    radioRXTimer->par("windowIndex") = 1;
+    scheduleAt(simTime() + listeningWindowRXC, radioRXTimer);
+}
+
+void Radio::receiveSignal(cComponent *, simsignal_t id, double value, cObject *)
+{
+    if (id != wakeupRelay || retransmissionModel != RetransmissionModel::EP431 ||
+        (deviceType != DevType::RELAY && deviceType != DevType::IPBRIDGE))
+        return;
+    Enter_Method("receiveSignal");
+    relayListeningUntil = std::max(relayListeningUntil, simTime() + value);
+    scheduleAt(relayListeningUntil, new cMessage("relayListenTimeout", SelfMsgType::RELAY_RX_TIMEOUT));
+    if (radioActivity != RadioActivity::RECEIVING && radioActivity != RadioActivity::TRANSMITTING)
+        updateRadioActivity(RadioActivity::LISTENING);
+}
+
 void Radio::updateRadio()
 {
-    if (((radioActivity == RadioActivity::RECEIVING) or (radioActivity == RadioActivity::TRANSMITTING))
-            and (simTime() < busyUntil)) {
+    if ((radioActivity == RadioActivity::RECEIVING || radioActivity == RadioActivity::TRANSMITTING) &&
+        simTime() < busyUntil)
         return;
-    }
-    switch (deviceType) {
-        case DevType::GATEWAY:
-            updateRadioActivity(RadioActivity::LISTENING);
-            EV << " RADIO " << tmp_name << " t=" << simTime() << " " << "listening start" << "\n";
-            getParentModule()->getDisplayString().setTagArg("t",0,"Listening");
-            break;
-        case DevType::RELAY:
-            if (currentRcvMessage && currentRcvMessage->isWOR())
-            {
-                updateRadioActivity(RadioActivity::LISTENING);
-                getParentModule()->getDisplayString().setTagArg("t",0,"Listening msg after WOR");
-            }
-            else
-            {
-                if (retransmissionModel == TS011)
-                {
-                    updateRadioActivity(RadioActivity::WOR);
-                    getParentModule()->getDisplayString().setTagArg("t",0,"Listening WOR");
-                }
-                if (retransmissionModel == EP431)
-                {
-                    if (simTime() < relayListeningUntil) {
-                        updateRadioActivity(RadioActivity::LISTENING);
-                        getParentModule()->getDisplayString().setTagArg("t",0,"Listening rly");
-                    }
-                    else {
-                        updateRadioActivity(RadioActivity::RADIOOFF);
-                        getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
-                    }
-                }
-            }
-            break;
-        case DevType::ENDNODE:
-            if (((dayTime >= listeningWindowStart1) and (dayTime < listeningWindowStart1 + listeningWindowDuration1))
-                    or ((dayTime >= listeningWindowStart2)
-                            and (dayTime < listeningWindowStart2 + listeningWindowDuration2))) {
-                updateRadioActivity(RadioActivity::LISTENING);
-                rssiOfCurrentReceive = sensitivity-1;
-
-                EV << " RADIO " << tmp_name << " t=" << simTime() << " listening start" << "\n";
-            }
-            else {
-                updateRadioActivity(RadioActivity::RADIOOFF);
-                rssiOfCurrentReceive = sensitivity-1;
-
-                EV << " RADIO " << tmp_name << " t=" << simTime() << " radio off" << "\n";
-            }
-            break;
-
-        case DevType::IPBRIDGE:
-            // The LoRa side of the LTE bridge uses the same predictable,
-            // pseudorandom receive slots as an EP431 relay. It must not keep
-            // the LoRa receiver listening continuously.
-            if (simTime() < relayListeningUntil) {
-                updateRadioActivity(RadioActivity::LISTENING);
-                getParentModule()->getDisplayString().setTagArg("t",0,"Listening IP");
-            }
-            else {
-                updateRadioActivity(RadioActivity::RADIOOFF);
-                getParentModule()->getDisplayString().setTagArg("t",0,"OFF");
-            }
-            break;
-
-        case DevType::DEVUNKNOWN:
-            assert("Unknown module");
-            break;
-    }
+    updateIdleRadioState();
 }
+
+bool Radio::roleAcceptsPacket(const LoRaPacket *packet) const
+{
+    return radioActivity == RadioActivity::LISTENING && packet->channel == activeReceiveChannel;
+}
+
+bool Radio::acceptsAirDelivery(const LoRaPacket *packet) const
+{
+    if (packet == nullptr)
+        return false;
+    if (radioActivity == RadioActivity::TRANSMITTING || radioActivity == RadioActivity::RECEIVING)
+        return true; // deliver so collision/capture logic can evaluate it
+    return roleAcceptsPacket(packet);
+}
+
+bool Radio::relayScanOverlaps(const LoRaPacket *packet, simtime_t *scanTime) const
+{
+    if (!packet->isWOR() || ts011CadPeriodicity <= 0)
+        return false;
+    double offset = 0;
+    if (packet->channel == ts011SecondWorChannel) {
+        if (!ts011SecondChannelEnabled)
+            return false;
+        offset = ts011CadPeriodicity / 2.0;
+    }
+    else if (packet->channel != ts011DefaultWorChannel) {
+        return false;
+    }
+
+    const double start = simTime().dbl();
+    const double symbol = packet->symbolTime();
+    const double earliestScan = start - ts011ChannelScanSymbols * symbol;
+    const double latestScan = start + packet->calcMsgPreamble() * symbol -
+                              (6 + ts011CadToRxSymbols) * symbol;
+    const double n = std::ceil((earliestScan - offset) / ts011CadPeriodicity - 1e-12);
+    const double candidate = offset + std::max(0.0, n) * ts011CadPeriodicity;
+    if (candidate + 1e-12 < earliestScan || candidate - 1e-12 > latestScan)
+        return false;
+    if (scanTime != nullptr)
+        *scanTime = SimTime(candidate);
+    return true;
+}
+
 void Radio::receiveFromNetwork(LoRaPacket *msg)
 {
-    float transmissionTime = 0;
-    double rssi = 0;
-    double realSensitivity;
-    bool rcvOK = 0;
-
-    if (msg->senderId != myKeeperIndex && deviceType == DevType::ENDNODE)
+    if (msg->senderId != myKeeperIndex && deviceType == DevType::ENDNODE) {
+        delete msg;
         return;
+    }
+    if (!acceptsAirDelivery(msg)) {
+        delete msg;
+        return;
+    }
 
-    const bool relayAccessUplink =
-            deviceType == DevType::RELAY && msg->isUplink && msg->relayRequired && !msg->isRelayed;
-    const bool relayAccessDownlink =
-            deviceType == DevType::ENDNODE && !msg->isUplink && msg->isRelayed;
-    const bool relayBackhaulUplink =
-            deviceType == DevType::GATEWAY && msg->isUplink && msg->isRelayed;
-    const bool relayBackhaulDownlink =
-            deviceType == DevType::RELAY && !msg->isUplink && msg->relayRequired;
-    const bool ipBridgeAccessUplink =
-            deviceType == DevType::IPBRIDGE && msg->isUplink && msg->relayRequired;
+    const bool relayAccessUplink = deviceType == DevType::RELAY && msg->isUplink &&
+        msg->relayRequired && !msg->isRelayed;
+    const bool relayAccessDownlink = deviceType == DevType::ENDNODE && !msg->isUplink && msg->isRelayed;
+    const bool relayBackhaulUplink = deviceType == DevType::GATEWAY && msg->isUplink && msg->isRelayed;
+    const bool relayBackhaulDownlink = deviceType == DevType::RELAY && !msg->isUplink && msg->relayRequired;
+    const bool ipBridgeAccessUplink = deviceType == DevType::IPBRIDGE && msg->isUplink && msg->relayRequired;
     const bool relayAccessLink = relayAccessUplink || relayAccessDownlink;
     const bool reliableRelayBackhaul = relayBackhaulUplink || relayBackhaulDownlink;
 
-    // All scheduled EP431 relays open the planned receive slot, which is
-    // relevant to their energy budget. Only the relay selected by proximity
-    // accepts and forwards the frame, matching the LNS assignment assumption
-    // and preventing duplicate retransmissions.
     if (relayAccessUplink || ipBridgeAccessUplink) {
-        const DevType receiverType = relayAccessUplink ? DevType::RELAY : DevType::IPBRIDGE;
-        Radio *closestReceiver = nullptr;
-        double closestDistanceSquared = std::numeric_limits<double>::max();
-        for (const Node& node : keeper->returnRadioDevices()) {
-            if (node.devType != receiverType || node.radio == nullptr)
+        const DevType targetType = relayAccessUplink ? DevType::RELAY : DevType::IPBRIDGE;
+        Radio *closest = nullptr;
+        double best = std::numeric_limits<double>::max();
+        for (const Node &node : keeper->returnRadioDevices()) {
+            if (node.devType != targetType || node.radio == nullptr)
                 continue;
             const double dx = node.radio->position.x - msg->senderPositionX;
             const double dy = node.radio->position.y - msg->senderPositionY;
-            const double distanceSquared = dx * dx + dy * dy;
-            if (distanceSquared < closestDistanceSquared) {
-                closestDistanceSquared = distanceSquared;
-                closestReceiver = node.radio;
+            const double d2 = dx * dx + dy * dy;
+            if (d2 < best) {
+                best = d2;
+                closest = node.radio;
             }
         }
-        if (closestReceiver != this) {
+        if (closest != this) {
             delete msg;
             return;
         }
     }
 
-    //verify colisions with transmission:
-    if (radioActivity == RadioActivity::TRANSMITTING)              //for gateway colistion is not possible
-    {
-        collisionCount++;
-        this->getParentModule()->bubble("Tx collision");
-        keeper->recordColision(this->myKeeperIndex, msg->getSenderModuleId());
+    if (radioActivity == RadioActivity::TRANSMITTING) {
+        keeper->recordColision(myKeeperIndex, msg->getSenderModuleId());
         dropByCollision(msg);
         return;
     }
 
-    // The thesis assumes that a relay is installed in LOS conditions. The
-    // ED<->RL access link therefore has a 10 dB installation advantage, while
-    // propagation losses on the RL<->GW backhaul are deliberately omitted.
-    // Packet collisions are still handled by the normal receiver logic below.
-    //calc RSS based on distance from transmitter
-    rssi = getRssi((LoRaPacket*)msg);
-
-    //calculate sensitivity based on keeper distortion activity
-    realSensitivity = sensitivity + sqrt(keeper->distortionLevel) + 2.5 * (12-msg->spreadingFactor);            //każde zmniejszenie SF powoduje 2,5db mniejszy rpóg detekcji
-
-    //apply random variation based on signal observation
-    double currentPL = normal(0, par("pathlosStd"));
-    rssi += currentPL;
-
+    double rssi = getRssi(msg);
+    const double realSensitivity = sensitivity + std::sqrt(keeper->distortionLevel) +
+                                   2.5 * (12 - msg->spreadingFactor);
+    const double randomPathLoss = normal(0, par("pathlosStd"));
+    rssi += randomPathLoss;
     const double relayLinkMarginDb = par("relayLinkMarginDb").doubleValue();
     if (relayAccessLink)
         rssi += relayLinkMarginDb;
-
-    // The reconstructed LoRa-to-LTE scenario used a +50 dB LOS advantage as
-    // a practical equivalent of a lossless access link.
     if (ipBridgeAccessUplink)
         rssi += par("ipBridgeLinkMarginDb").doubleValue();
-
-    // Chapter 6 explicitly excludes RL-GW link loss from the model. Keep a
-    // deterministic positive margin instead of letting distance/path-loss
-    // reject a relayed frame. Interference/capture can still reject it.
     if (reliableRelayBackhaul)
         rssi = std::max(rssi, realSensitivity + relayLinkMarginDb);
-
     msg->rssi = rssi;
     msg->rssi_margin = rssi - realSensitivity;
+    msg->snr = std::max(-20.0, std::min(11.0, msg->rssi_margin - 6.0));
 
-    EV << "RADIO " << tmp_name << " t=" << simTime() << " frame " << msg->getKind() << " RSSI = " << rssi << " SF=" << msg->spreadingFactor <<" PLR = "<<currentPL <<" ";
-
-    if (radioActivity == RadioActivity::LISTENING) {
-        if (rssi > realSensitivity) {
-            EV << "\033[1;32m received ok \033[0m\n";
-            rcvOK =  true;
-        }
-        else
-        {
-            EV << "\033[1;31m below threshold\033[0m " << realSensitivity << "\n";
-        }
-    }
-    else if (radioActivity == RadioActivity::RECEIVING) {
-        //New signal stronger than existing more than 6dBm. Current msg will be discarted new will start receiving
+    bool receiveOk = false;
+    if (radioActivity == RadioActivity::RECEIVING) {
         if (rssi > rssiOfCurrentReceive + 6) {
-            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision capture" << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
-            this->getParentModule()->bubble("Rx col. ex");
+            if (radioUpdateReceive != nullptr && radioUpdateReceive->isScheduled())
+                cancelAndDelete(radioUpdateReceive);
+            radioUpdateReceive = nullptr;
             dropByCollision(currentRcvMessage);
             currentRcvMessage = nullptr;
-            rcvOK = true;
+            receiveOk = true;
         }
-        //New signal is 6dBm weaker than current receive. Current msg will not be affected.
         else if (rssi < rssiOfCurrentReceive - 6) {
-            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision no break " << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
-            this->getParentModule()->bubble("Rx col. new");
             dropByCollision(msg);
-            rcvOK =  false;
+            return;
         }
-        //RSSI of new frame simmilar to currently received. Both frames are broken
         else {
-            EV << "RADIO " << tmp_name << " t=" << simTime() << "Collision both current=" << rssiOfCurrentReceive << "[dBm] new=" << rssi << "[dBm]\n";
-            keeper->recordColision(this->myKeeperIndex, msg->getSenderModuleId());
-            this->getParentModule()->bubble("Rx col. both");
-            rcvOK = false;
+            if (radioUpdateReceive != nullptr && radioUpdateReceive->isScheduled())
+                cancelAndDelete(radioUpdateReceive);
+            radioUpdateReceive = nullptr;
             dropByCollision(currentRcvMessage);
-            dropByCollision(msg);
             currentRcvMessage = nullptr;
+            dropByCollision(msg);
+            updateRadio();
+            return;
         }
     }
-    else if (radioActivity == RadioActivity::WOR || radioActivity == RadioActivity::EWOR) {
-        if (rssi > realSensitivity && msg->isWOR())
-        {
-            this->getParentModule()->bubble("Woke up from WOR!");
-            rcvOK = true;
-        }
+    else if (radioActivity == RadioActivity::LISTENING) {
+        receiveOk = rssi > realSensitivity;
     }
-    else
-    {
-        rcvOK = false;
+    else if ((radioActivity == RadioActivity::WOR || radioActivity == RadioActivity::RADIOOFF) &&
+             deviceType == DevType::RELAY && retransmissionModel == RetransmissionModel::TS011 &&
+             msg->isWOR()) {
+        receiveOk = rssi > realSensitivity && msg->worValid && relayScanOverlaps(msg);
     }
 
-    if (rcvOK) {
-
-        transmissionTime = ((LoRaPacket*)msg)->calcMsgDuration();
-        EV << "RADIO " << tmp_name << " t=" << simTime() << " Msg receiving, len= " << transmissionTime << "[s]\n";
-        getParentModule()->getDisplayString().setTagArg("t",0,"RECEIVING");
-
-        //if (radioUpdateReceive != nullptr && radioUpdateReceive->isScheduled())                  //jak nie ustawione to wywala się
-        //    cancelEvent(radioRXTimer);
-
-        updateRadioActivity(RadioActivity::RECEIVING);
-
-        busyUntil = simTime() + transmissionTime;
-        //if (radioUpdateReceive == nullptr)
-            radioUpdateReceive = new cMessage("radioUpdateReceive",SelfMsgType::RXTIMER);
-
-        scheduleAt(busyUntil, radioUpdateReceive);
-        currentRcvMessage = ((LoRaPacket*)msg)->dupLoRa();
-
-        //this->energyConsumptionRx += transmissionTime * this->currentConsumptionRx;   //[mAs]
-        //energyConsumptionVector.record(this->energyConsumptionRx);
+    keeper->recordFrameReception(myKeeperIndex, msg->getSenderModuleId(), rssi, receiveOk);
+    if (!receiveOk) {
+        delete msg;
+        return;
     }
 
-    keeper->recordFrameReception(this->myKeeperIndex, msg->getSenderModuleId(), rssi, rcvOK);
+    if (deviceType == DevType::RELAY && msg->isWOR()) {
+        simtime_t scan;
+        relayScanOverlaps(msg, &scan);
+        const double preambleEnd = simTime().dbl() + msg->calcMsgPreamble() * msg->symbolTime();
+        msg->tOffsetMs = static_cast<int>(std::ceil((preambleEnd - scan.dbl()) * 1000.0));
+        relayExpectedDataChannel = msg->uplinkChannel;
+        LoRaPacket ack("WOR ACK timing", MsgType::MSGWORACK);
+        ack.length = TS011_WOR_ACK_LENGTH;
+        ack.spreadingFactor = msg->spreadingFactor;
+        relayExpectedUplinkUntil = simTime() + msg->calcMsgDuration() + ts011WorAckDelay +
+            ack.calcMsgDuration() + ts011WorDataDelay + ts011UplinkListenTimeout;
+        scheduleAt(relayExpectedUplinkUntil,
+                   new cMessage("ts011UplinkListenTimeout", SelfMsgType::RELAY_RX_TIMEOUT));
+    }
+
+    const double duration = msg->calcMsgDuration();
+    updateRadioActivity(RadioActivity::RECEIVING);
+    busyUntil = simTime() + duration;
     rssiOfCurrentReceive = rssi;
+    currentRcvMessage = msg;
+    radioUpdateReceive = new cMessage("radioReceiveComplete", SelfMsgType::RXTIMER);
+    scheduleAt(busyUntil, radioUpdateReceive);
 }
-void Radio::dropByCollision(LoRaPacket* lp)
+
+void Radio::dropByCollision(LoRaPacket *packet)
 {
-    if (!lp) return; // safety
-
-    lp->autodetectUplink();
-
-    long devIdx = lp->par("KeeperIndex").longValue();
-    long pktId  = lp->par("PacketId").longValue();
-
-    EV << simTime() << " [Radio] Drop by COLLISION: dev=" << devIdx
-       << " pkt=" << pktId << " dir=" << (lp->isUplink ? "UL" : "DL") << "\n";
-
-    if (keeper) {
-        if (lp->isUplink)
-            keeper->reportUplinkCollision(devIdx, pktId);
+    if (packet == nullptr)
+        return;
+    packet->autodetectUplink();
+    if (packet->hasPar("KeeperIndex") && packet->hasPar("PacketId")) {
+        const long dev = packet->par("KeeperIndex").longValue();
+        const long id = packet->par("PacketId").longValue();
+        if (packet->isUplink)
+            keeper->reportUplinkCollision(dev, id);
         else
-            keeper->reportDownlinkCollision(devIdx, pktId);
+            keeper->reportDownlinkCollision(dev, id);
     }
-    collisionCount++;
-    delete lp; // kończymy żywot pakietu
+    ++collisionCount;
+    delete packet;
 }
 
 void Radio::sendToNetwork(LoRaPacket *msg)
 {
-    if (msg == NULL) {
-        if (sendQueue.size() > 0) {
-            LoRaPacket *msgFromQueue = new LoRaPacket(sendQueue.front());
-            directSendWithDelete(msgFromQueue);
-            sendQueue.erase(sendQueue.begin());
-        }
+    if (msg == nullptr) {
+        if (sendQueue.empty())
+            return;
+        auto *next = new LoRaPacket(sendQueue.front());
+        sendQueue.pop_front();
+        directSendWithDelete(next);
+        return;
     }
-    else {
-       directSendWithDelete(msg);
+    if ((radioActivity == RadioActivity::TRANSMITTING || radioActivity == RadioActivity::RECEIVING) &&
+        simTime() < busyUntil) {
+        sendQueue.push_back(*msg);
+        delete msg;
+        return;
     }
+    directSendWithDelete(msg);
 }
+
 void Radio::directSendWithDelete(LoRaPacket *msg)
 {
-    double transmissionTime;
+    if (deviceType == DevType::ENDNODE)
+        msg->senderId = myKeeperIndex;
+    if (deviceType == DevType::RELAY && msg->encapsulated && msg->isUplink)
+        msg->forwardingRelayId = myKeeperIndex;
+    msg->senderPositionX = position.x;
+    msg->senderPositionY = position.y;
+    msg->transmissionPower = txPower;
+    if (msg->spreadingFactor == -1)
+        msg->spreadingFactor = lastSpreadingFactor;
 
-    if (keeper->returnRadioDevices().size() > 0 && dynamic_cast<LoRaPacket *>(msg) != nullptr)
-    {
-        LoRaPacket *job;
-        job = (LoRaPacket*)msg;
+    activeReceiveChannel = msg->channel;
+    updateRadioActivity(RadioActivity::TRANSMITTING);
+    const double duration = msg->calcMsgDuration();
+    busyUntil = simTime() + duration;
+    auto *done = new cMessage("radioTransmitComplete", SelfMsgType::TXTIMER);
+    done->addPar("txKind") = msg->getKind();
+    done->addPar("txChannel") = msg->channel;
+    done->addPar("worAckExpected") = msg->isWOR() && msg->worType == WorType::CLASS_A_UPLINK;
+    done->addPar("includeRxr") = msg->rxrEligible;
+    scheduleAt(busyUntil, done);
+    if (msg->isWOR())
+        disableClassAWindows = true;
+    getParentModule()->getDisplayString().setTagArg("r", 0, "200");
 
-        if (deviceType == DevType::ENDNODE)
-            job->senderId = myKeeperIndex;
-
-        cModule* en = getParentModule();                 // Radio jest submodułem Endnode
-        job->senderPositionX = position.x;
-        job->senderPositionY = position.y;
-        job->transmissionPower = txPower;
-        job->channel = 1; //TODO
-        //job->spreadingFactor = par("forceSF").intValue();
-        if (job->spreadingFactor == -1)     //means ADR enabled
-            job->spreadingFactor = lastSpreadingFactor;
-
-        //int msgSize = job->length;
-        //int spreadingfactor = job->spreadingFactor;
-
-        updateRadioActivity(RadioActivity::TRANSMITTING);
-        transmissionTime = job->calcMsgDuration(); //transmissionTimeInSec(msgSize, spreadingfactor);
-
-        busyUntil = simTime() + transmissionTime;
-
-        cMessage *radioUpdateTransmission = new cMessage("radioUpdate-transmission");       //to chyba nie powinno tak wygl�da�. Pwinna by� jedna wiadomo�� w k�ko wysy�ana jak mechanizm self-frame
-        radioUpdateTransmission->setKind(SelfMsgType::TXTIMER);
-        if (msg->getKind() == MsgType::MSGWOR)
-            disableLAT = true;
-
-        //this->energyConsumptionTx += transmissionTime * this->currentConsumptionTx;   //[mAs]     //replaced with updateRadioActivity()
-        //this->par("energyConsumption").setDoubleValue(energyConsumptionTx + energyConsumptionRx);
-
-        scheduleAt(busyUntil, radioUpdateTransmission);
-        EV << "RADIO" << tmp_name << " t=" << simTime() << " Sending radio frame "<< job->GetPacketName() << "\n";
-
-        getParentModule()->getDisplayString().setTagArg("r",0,"200");
-    }
-    for (const Node &device : keeper->returnRadioDevices())
-    {
-
-        //cModule *target = getParentModule()->getParentModule()->getSubmodule(device.name.c_str(), device.index);
-        if (device.radio == nullptr)
+    for (const Node &device : keeper->returnRadioDevices()) {
+        if (device.radio == nullptr || device.radio == this)
             continue;
-
-        if (device.radio == this)       //nie wysyłaj do siebie
+        if (!device.radio->acceptsAirDelivery(msg))
             continue;
-
-        // filter: skip devices whose radio is OFF or UNKNOWN
-        if (device.radio->isOffOrUnknown()) {
-            continue;
-        }
-
         sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
-
-        /*
-        std::string s = device.radio->getParentModule()->getFullName();
-        if (deviceType == DevType::ENDNODE)
-        {
-            if (s.rfind("endnode", 0) == std::string::npos){
-                sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
-            }
-        } else {
-            sendDirect(msg->dupLoRa(), device.radio->getParentModule(), "radioIn");
-        }*/
-        //if (((Radio*)target)->isListening())
     }
-    keeper->recordFrameTransmission(myKeeperIndex, msg->calcMsgDuration());
-
-    delete (LoRaPacket*)msg;
+    keeper->recordFrameTransmission(myKeeperIndex, duration);
+    delete msg;
 }
-bool Radio::isReceivedCorrectly(cMessage *msg, double rssi)
+
+bool Radio::isListening() const { return radioActivity == RadioActivity::LISTENING; }
+bool Radio::isOffOrUnknown() const noexcept
 {
-    //delete msg;
-    return false;
-
+    return radioActivity == RadioActivity::RADIOOFF || radioActivity == RadioActivity::UNKNOWN;
 }
 
-bool Radio::isListening()
-{
-    if (deviceType == DevType::GATEWAY)
-        return true;
-
-    if (deviceType == DevType::RELAY)
-        return true;
-
-    return (radioActivity == RadioActivity::LISTENING);
-}
 double Radio::getRssi(LoRaPacket *msg)
 {
-    //position.x = atof(getParentModule()->getDisplayString().getTagArg("p", 0));
-    //position.y = atof(getParentModule()->getDisplayString().getTagArg("p", 1));
-
-    double distance = sqrt(
-            pow(position.x - msg->senderPositionX, 2) + pow(position.y - msg->senderPositionY, 2));
-
-     EV << "RADIO" << tmp_name << " t=" << simTime() <<" Verify receive from: " << msg->senderPositionX << ", " << msg->senderPositionY << " distance: " << distance << "m\n";
-
-    return calculateReceivedPower(msg->transmissionPower, distance);
+    const double dx = position.x - msg->senderPositionX;
+    const double dy = position.y - msg->senderPositionY;
+    return calculateReceivedPower(msg->transmissionPower, std::sqrt(dx * dx + dy * dy));
 }
-double Radio::calculateReceivedPower(float pSend, double distance) //Okumura lite
+
+double Radio::calculateReceivedPower(float pSend, double distance)
 {
-    if (int(distance) == 0) {
+    if (static_cast<int>(distance) == 0)
         return pSend;
-    }
-    float K1 = 127.5;
-    float K2 = 35.2;
-    float PL = K1 + K2 * log10(distance / 500.0);           //deeper distortion affects RSSI
-
-    float pRec = pSend - PL;
-    if (pRec > pSend)
-        pRec = pSend;
-
-    return pRec;
-
+    const double pathLoss = 127.5 + 35.2 * std::log10(distance / 500.0);
+    return std::min(static_cast<double>(pSend), pSend - pathLoss);
 }
 
 void Radio::updateDaytime()
 {
-    int64_t timeInMinutesFromTheBeginning = simTime().inUnit(SIMTIME_S) / 60;
-    dayTime = timeInMinutesFromTheBeginning % (60 * 24);
+    dayTime = static_cast<int>((simTime().inUnit(SIMTIME_S) / 60) % (60 * 24));
 }
 
-void Radio::updateRadioActivity(RadioActivity::ra newRA)
+void Radio::updateRadioActivity(RadioActivity::ra next)
 {
-    double duration = (simTime() - lastRadioActivityChange).dbl();
-
-    // Optional always-on component kept separate from the measured sleep,
-    // receive and transmit currents. This makes an empirical calibration
-    // explicit in both the configuration and scalar results.
+    const double duration = (simTime() - lastRadioActivityChange).dbl();
     energyConsumptionBaseOffset += duration * currentConsumptionBaseOffset;
-
-    switch (radioActivity)
-    {
-        case RadioActivity::UNKNOWN:    //first init only
-            break;
-
+    switch (radioActivity) {
         case RadioActivity::RADIOOFF:
         case RadioActivity::TIMER:
             energyConsumptionIdle += duration * currentConsumptionIdle;
             break;
-
         case RadioActivity::RECEIVING:
         case RadioActivity::LISTENING:
             energyConsumptionRx += duration * currentConsumptionRx;
             break;
-
-
-        case RadioActivity::EWOR:
         case RadioActivity::WOR:
+        case RadioActivity::EWOR:
             energyConsumptionWOR += duration * currentConsumptionWOR;
             break;
-
         case RadioActivity::TRANSMITTING:
             energyConsumptionTx += duration * currentConsumptionTx;
             break;
+        default:
+            break;
     }
-
-    radioActivity = newRA;
+    radioActivity = next;
     lastRadioActivityChange = simTime();
-
-    keeper->recordEnergyConsumption(
-        myKeeperIndex,
-        energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx +
-            energyConsumptionWOR + energyConsumptionBaseOffset +
-            energyConsumptionLteAttach + energyConsumptionLteTransmit
-    );
+    keeper->recordEnergyConsumption(myKeeperIndex,
+        energyConsumptionIdle + energyConsumptionRx + energyConsumptionTx + energyConsumptionWOR +
+        energyConsumptionBaseOffset + energyConsumptionLteAttach + energyConsumptionLteTransmit);
 }
 
-/*
- * Offset current [uA]
-261,20  FS12
-150,65
-70,51
-41,56
-25,68
-16,90   SF7
- *
- */
+void GatewayRadio::updateIdleRadioState()
+{
+    updateRadioActivity(RadioActivity::LISTENING);
+}
 
+bool GatewayRadio::roleAcceptsPacket(const LoRaPacket *packet) const
+{
+    return packet->isUplink && !packet->isWOR();
+}
 
-bool Radio::isOffOrUnknown() const noexcept {
-    return (radioActivity == RadioActivity::RADIOOFF)
-        || (radioActivity == RadioActivity::UNKNOWN);
+void EndDeviceRadio::updateIdleRadioState()
+{
+    const bool dailyWindow =
+        (dayTime >= listeningWindowStart1 && dayTime < listeningWindowStart1 + listeningWindowDuration1) ||
+        (dayTime >= listeningWindowStart2 && dayTime < listeningWindowStart2 + listeningWindowDuration2);
+    updateRadioActivity(dailyWindow ? RadioActivity::LISTENING : RadioActivity::RADIOOFF);
+}
+
+bool EndDeviceRadio::roleAcceptsPacket(const LoRaPacket *packet) const
+{
+    return !packet->encapsulated && !packet->isUplink && packet->channel == activeReceiveChannel &&
+           (radioActivity == RadioActivity::LISTENING || radioActivity == RadioActivity::RECEIVING);
+}
+
+void RelayRadio::updateIdleRadioState()
+{
+    if (retransmissionModel == RetransmissionModel::TS011) {
+        if (simTime() < relayExpectedUplinkUntil) {
+            activeReceiveChannel = relayExpectedDataChannel;
+            updateRadioActivity(RadioActivity::LISTENING);
+        }
+        else {
+            updateRadioActivity(RadioActivity::WOR);
+        }
+    }
+    else if (simTime() < relayListeningUntil) {
+        updateRadioActivity(RadioActivity::LISTENING);
+    }
+    else {
+        updateRadioActivity(RadioActivity::RADIOOFF);
+    }
+}
+
+bool RelayRadio::roleAcceptsPacket(const LoRaPacket *packet) const
+{
+    if (packet->isUplink && packet->isRelayed)
+        return false; // TS011 is strictly single-hop in this simulator.
+    if (retransmissionModel == RetransmissionModel::TS011 && packet->isWOR())
+        return packet->worValid && relayScanOverlaps(packet);
+    if (retransmissionModel == RetransmissionModel::TS011 && packet->isUplink && packet->relayRequired)
+        return simTime() < relayExpectedUplinkUntil && packet->channel == relayExpectedDataChannel;
+    if (!packet->isUplink && packet->encapsulated && packet->forwardingRelayId != myKeeperIndex)
+        return false;
+    return radioActivity == RadioActivity::LISTENING && packet->channel == activeReceiveChannel;
+}
+
+void IpBridgeRadio::updateIdleRadioState()
+{
+    updateRadioActivity(simTime() < relayListeningUntil ? RadioActivity::LISTENING : RadioActivity::RADIOOFF);
+}
+
+bool IpBridgeRadio::roleAcceptsPacket(const LoRaPacket *packet) const
+{
+    return packet->isUplink && packet->relayRequired && !packet->isRelayed &&
+           radioActivity == RadioActivity::LISTENING;
 }
 
 void Radio::finish()
 {
-    // Account for the interval between the last state transition and the end
-    // of the simulation before writing energy scalars.
     updateRadioActivity(radioActivity);
-    recordScalar("Energy consumption total Tx", this->energyConsumptionTx);
-    recordScalar("Energy consumption total Rx", this->energyConsumptionRx);
-    recordScalar("Energy consumption total Idle", this->energyConsumptionIdle);
-    recordScalar("Energy consumption total WOR", this->energyConsumptionWOR);
-    recordScalar("Energy consumption total BaseOffset", this->energyConsumptionBaseOffset);
-    recordScalar("Energy consumption total LTE attach", this->energyConsumptionLteAttach);
-    recordScalar("Energy consumption total LTE transmit", this->energyConsumptionLteTransmit);
-    recordScalar("LTE attach count", this->lteAttachCount);
-    recordScalar("LTE transmit count", this->lteTransmitCount);
+    recordScalar("Energy consumption total Tx", energyConsumptionTx);
+    recordScalar("Energy consumption total Rx", energyConsumptionRx);
+    recordScalar("Energy consumption total Idle", energyConsumptionIdle);
+    recordScalar("Energy consumption total WOR", energyConsumptionWOR);
+    recordScalar("Energy consumption total BaseOffset", energyConsumptionBaseOffset);
+    recordScalar("Energy consumption total LTE attach", energyConsumptionLteAttach);
+    recordScalar("Energy consumption total LTE transmit", energyConsumptionLteTransmit);
+    recordScalar("LTE attach count", lteAttachCount);
+    recordScalar("LTE transmit count", lteTransmitCount);
+    recordScalar("Radio collision count", collisionCount);
 }
 
-double Radio::readCoord(cModule* m, const char* name, int tagIndex) {
-    if (m->hasPar(name))               // preferuj parametry
-        return m->par(name).doubleValue();
-    // fallback: spróbuj display string "p"
-    const char* s = m->getDisplayString().getTagArg("p", tagIndex);
-    return (s && *s) ? atof(s) : 0.0;
-}
-
-}
-;
-// namespace
+} // namespace opp_lora_relay_official

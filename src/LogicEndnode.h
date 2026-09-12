@@ -1,83 +1,104 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
-#ifndef __OPP_LORA_RELAY_OFFICIAL_LOGICENDNODE_H_
-#define __OPP_LORA_RELAY_OFFICIAL_LOGICENDNODE_H_
+#ifndef OPP_LORA_RELAY_LOGIC_ENDNODE_H
+#define OPP_LORA_RELAY_LOGIC_ENDNODE_H
 
 #include <omnetpp.h>
-#include "common.h"
-#include "Keeper.h"
 
-using namespace omnetpp;
+#include "Keeper.h"
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
-class LogicEndnode : public cSimpleModule
+class LoRaPacket;
+
+class LogicEndnode : public omnetpp::cSimpleModule
 {
-public:
-    LogicEndnode();
-    virtual ~LogicEndnode();
-    int myKeeperIndex;
+  public:
+    LogicEndnode() = default;
+    ~LogicEndnode() override;
+    int myKeeperIndex = -1;
 
-private:
-    int dayTime; //minutes
-    int transmittingWindowStart1;
-    int transmittingWindowStart2;
-    int transmittingWindowDuration1;
-    int transmittingWindowDuration2;
-    cMessage *timerMessageWindow1;
-    cMessage *timerMessageWindow2;
+  protected:
+    void initialize() override;
+    void handleMessage(omnetpp::cMessage *msg) override;
+    void finish() override;
 
-    int windowsPerDay;                 // 1 lub 2
-    int framesPerWindowMin;            // min. ramek w oknie (>=1)
-    int framesPerWindowMax;            // max. ramek w oknie (>=min)
-    int framesRemainingWin1;           // ile pozostało do wysłania w bieżącym oknie #1
-    int framesRemainingWin2;           // analogicznie dla okna #2
-
-    EndDeviceState endDeviceState;
-    int MsgAfterWOR;
-    int packetCounter;
-
-
-    //unsigned char packetCounter;
-    int lastACK;
-    unsigned char waitingResponse;
-    int missedResponse;
-    Keeper *keeper;
-
-    RetransmissionModel retransmissionModel;
-    double RTCdrift;
-    simtime_t lastACKTime;
-    simtime_t lastOnline;
-
-    double offlineMax;
-    double offlineTotal;
-
-    simsignal_t wakeupRelay;
-
-protected:
-    virtual void initialize() override;
-    virtual void handleMessage(cMessage *msg) override;
-    virtual void handleParameterChange(const char * parname ) override;
-    virtual void finish() override;
-
+  private:
+    void scheduleInitialWindow(omnetpp::cMessage *timer, int windowIndex);
+    void scheduleFollowingWindow(omnetpp::cMessage *timer, int windowIndex);
+    void beginApplicationTransmission();
+    void scheduleTs011Wor(int packetId, bool join, bool ackRequired);
+    void sendTs011Wor(omnetpp::cMessage *event);
+    void sendDataFrame(int packetId, bool join, bool ackRequired, bool relayed);
+    void startResponseTimeout();
+    void handleResponseTimeout(omnetpp::cMessage *msg);
+    void handleDownlink(LoRaPacket *packet);
+    void handleWorAck(LoRaPacket *packet);
+    void updateLogicalState(EndDeviceState state);
+    void updateTs011MissedAck(unsigned int counter);
     void recordOnline();
-    void updateDaytime();
-    void updateLogicalState(EndDeviceState newState);
+    int chooseWorChannel() const;
+    int unsynchronizedPreambleSymbols(int spreadingFactor) const;
+    omnetpp::simtime_t synchronizedWorStart(int spreadingFactor, int channel,
+                                           int &preambleSymbols);
+
+    Keeper *keeper = nullptr;
+    EndDeviceState endDeviceState = EndDeviceState::OFFLINE;
+    RetransmissionModel model = RetransmissionModel::UNKNOWN;
+    Ts011SyncState syncState = Ts011SyncState::INITIALIZED;
+
+    int transmittingWindowStart[2]{0, 720};
+    int transmittingWindowDuration[2]{180, 180};
+    int windowsPerDay = 2;
+    int framesPerWindowMin = 1;
+    int framesPerWindowMax = 1;
+    int framesRemaining[2]{1, 1};
+    omnetpp::cMessage *windowTimers[2]{nullptr, nullptr};
+    omnetpp::cMessage *responseTimer = nullptr;
+
+    int packetCounter = 0;
+    int lastAckRequestCount = 0;
+    int missedResponse = 0;
+    bool waitingResponse = false;
+    int applicationPayloadLength = 51;
+    int missedPacketsToSearchRelay = 2;
+    int forceSpreadingFactor = 12;
+    omnetpp::simtime_t lastAckTime;
+    omnetpp::simtime_t lastOnline;
+    double offlineMax = 0;
+    double offlineTotal = 0;
+    omnetpp::simsignal_t wakeupRelay;
+
+    int ts011EndDeviceSpreadingFactor = 10;
+    int ts011DefaultWorChannel = 1;
+    int ts011SecondWorChannel = 2;
+    int ts011UplinkChannel = 1;
+    bool ts011SecondChannelConfigured = false;
+    double ts011CadPeriodicity = 1;
+    double knownCadPeriodicity = 1;
+    int ts011CadToRxSymbols = 8;
+    double ts011WorAckDelay = 1;
+    double ts011WorDataDelay = 1;
+    double ts011WorValidityProbability = 1;
+    int ts011RelayClockAccuracyPpm = 40;
+    int ts011EndDeviceClockAccuracyPpm = 40;
+    unsigned int worFrameCounter = 0;
+    unsigned int lastAcknowledgedWorCounter = 0;
+    unsigned int pendingWorCounter = 0;
+    bool pendingWorAcknowledged = false;
+    int consecutiveWorWithoutAck = 0;
+    int lastWorPreambleSymbols = 0;
+    int lastWorChannel = 1;
+    omnetpp::simtime_t tLast;
+    omnetpp::simtime_t tRef;
+
+    long worTransmitted = 0;
+    long worAckReceived = 0;
+    long syncLosses = 0;
+    long invalidWorTransmitted = 0;
+    double totalWorPreambleSymbols = 0;
+    double totalWorAirtime = 0;
 };
 
-} //namespace
+} // namespace opp_lora_relay_official
 
 #endif

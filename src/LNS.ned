@@ -23,6 +23,7 @@ simple LNS
 
     	@display("i=device/router;i2=status/bulb");
     	double dedupHoldoff @unit(s) = default(0.1s);
+        double ts011RelayForwardDelay @unit(s) = default(1s);
         double listeningWindowRX1; //listening window 1 duration in seconds
         double listeningWindowRX2; //listening window 2 duration in seconds
         double listeningWindowRXR; //listening relay window duration in seconds

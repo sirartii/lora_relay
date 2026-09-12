@@ -21,6 +21,6 @@ simple LogicIpBridge
         bool forwardDownlink = default(true); // ewentualny DL z LNS -> Radio (domyślnie: nie)
     gates:
         output logicOut;   // do Radio.fromLogic (na wypadek gdybyś kiedyś włączył DL)
-        input  logicIn;    // z Distortion/Radio.toLogic (uplink LoRa)
+        input  logicIn;    // from IpBridgeRadio.toLogic
         inout  json;       // idealne łącze IP do LNS
 }

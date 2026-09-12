@@ -25,7 +25,7 @@ void LogicIpBridge::initialize()
 
 void LogicIpBridge::handleMessage(cMessage *msg)
 {
-    // UPLINK z radia (przychodzi z Distortion -> logicIn)
+    // Uplink from the radio.
     if (msg->arrivedOn("logicIn")) {
         auto *lp = dynamic_cast<LoRaPacket*>(msg);
         if (!lp) {
@@ -70,6 +70,5 @@ void LogicIpBridge::handleMessage(cMessage *msg)
 }
 
 } // namespace
-
 
 

@@ -14,9 +14,8 @@
 //
 
 package opp_lora_relay_official;
-import opp_lora_relay_official.Radio;
+import opp_lora_relay_official.RelayRadio;
 import opp_lora_relay_official.LogicRelay;
-import opp_lora_relay_official.Distortion;
 
 
 module Relay
@@ -29,19 +28,15 @@ module Relay
         input radioIn @directIn;
     //	    output radioOut;
     submodules:
-        radio: Radio {
+        radio: RelayRadio {
             @display("p=277,222");
         }
         logic: LogicRelay {
             @display("p=34,27");
         }
-        distortion: Distortion {
-            @display("p=115,158");
-        }
     connections:
         radio.radioIn <-- radioIn;
         //        radio.radioOut --> radioOut;
         radio.fromLogic <-- logic.logicOut;
-        radio.toLogic --> distortion.in;
-        distortion.out --> logic.logicIn;
+        radio.toLogic --> logic.logicIn;
 }

@@ -495,10 +495,6 @@ void Keeper::recordResultsToFile()
 
     // wykorzystanie względem okien (0..1) i dla porównania stare (0..1)
     const double utilPerWindow = (activeSecsTotal > 0.0) ? (totalDuration / activeSecsTotal) : 0.0;
-    const double utilPerDay    = (simTime().dbl()   > 0.0) ? (totalDuration / simTime().dbl()) : 0.0;
-
-
-
     // Keep legacy field in sync so downstream code / scalars remain valid
     totalPacketsDelivered = static_cast<int>(deliveredEndToEnd);
     const int simDays_local  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));

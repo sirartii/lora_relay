@@ -1,32 +1,32 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 package opp_lora_relay_official;
 
-//
-// TODO auto-generated module
-//
 simple LogicRelay
 {
     parameters:
-        double listeningWindowRX1;
-        double listeningWindowRX2;
-        double listeningWindowRXR;
-        double listeningWindowRXC;
-        double listeningWindowRXCR;
-        @signal[wakeupRelay](type=double);
+        int retransmissionModel;
+        double ts011WorAckDelay @unit(s) = default(1s);
+        double ts011RelayForwardDelay @unit(s) = default(1s);
+        double ts011RxrDelay @unit(s) = default(7s);
+        double ts011WorAckProbability = default(1);
+        double ts011CadPeriodicity @unit(s) = default(1s);
+        int ts011CadToRxSymbols = default(8);
+        int ts011RelayClockAccuracyPpm = default(40);
+        int ts011RelaySpreadingFactor = default(9);
+        int ts011RelayUplinkChannel = default(3);
+        int ts011RxrChannel = default(1);
+        int ts011MaximumForwardedPayload = default(222);
+        bool ts011ForwardingEnabled = default(true);
+
+        // A negative reload rate means "no limit". Buckets start with one
+        // hour's reload-rate worth of tokens, as required by TS011.
+        double ts011JoinReloadRate = default(4);
+        double ts011JoinBucketSize = default(8);
+        double ts011PerDeviceReloadRate = default(-1);
+        double ts011PerDeviceBucketSize = default(0);
+        double ts011TrustedReloadRate = default(8);
+        double ts011TrustedBucketSize = default(16);
+        double ts011GlobalReloadRate = default(8);
+        double ts011GlobalBucketSize = default(16);
     gates:
         output logicOut;
         input logicIn;

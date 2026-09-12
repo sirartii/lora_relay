@@ -1,27 +1,9 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-//
-
 package opp_lora_relay_official;
 
-//
-// TODO auto-generated module
-//
 simple LogicEndnode
 {
-        parameters:
-        volatile double sendInterval @unit(s) = default(exponential(60min));
+    parameters:
+        volatile double sendInterval @unit(s) = default(exponential(60min)); // legacy, window scheduler is authoritative
         int transmittingWindowStart1;
         int transmittingWindowStart2;
         int transmittingWindowDuration1;
@@ -29,15 +11,26 @@ simple LogicEndnode
         int missedPacketsToSearchRelay;
         int retransmissionModel;
         double clockDriftMax;
+        int framesPerWindowMin = default(1);
+        int framesPerWindowMax = default(framesPerWindowMin);
+        int windowsPerDay = default(2);
+        int forceSF = default(12);
+        int applicationPayloadLength = default(51);
+
+        int ts011EndDeviceSpreadingFactor = default(10);
+        int ts011DefaultWorChannel = default(1);
+        int ts011SecondWorChannel = default(2);
+        int ts011UplinkChannel = default(1);
+        bool ts011SecondChannelEnabled = default(false);
+        double ts011CadPeriodicity @unit(s) = default(1s);
+        int ts011CadToRxSymbols = default(8);
+        double ts011WorAckDelay @unit(s) = default(1s);
+        double ts011WorDataDelay @unit(s) = default(1s);
+        double ts011WorValidityProbability = default(1);
+        int ts011RelayClockAccuracyPpm = default(40);
+        int ts011EndDeviceClockAccuracyPpm = default(40);
         @signal[wakeupRelay](type=double);
-
-		int framesPerWindowMin = default(1);
-		int framesPerWindowMax = framesPerWindowMin;
-		int windowsPerDay = default(2);
-		int forceSF = default(12);
-
-
-	gates:
+    gates:
         output logicOut;
         input logicIn;
 }

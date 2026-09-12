@@ -72,6 +72,8 @@ class LNS : public omnetpp::cSimpleModule
     }
     std::unordered_map<long long, DedupEntry> dedup;
     std::vector<ReceivedFrame> receivedFrames;
+    double relayForwardDelay = 1.0;
+    omnetpp::cStdDev networkTimeCorrectionError;
 
     enum { KIND_DEDUP_TIMER = 0x0DB1 };
 

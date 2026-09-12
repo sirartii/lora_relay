@@ -14,9 +14,8 @@
 //
 
 package opp_lora_relay_official;
-import opp_lora_relay_official.Radio;
+import opp_lora_relay_official.EndDeviceRadio;
 import opp_lora_relay_official.LogicEndnode;
-import opp_lora_relay_official.Distortion;
 
 
 module Endnode
@@ -29,19 +28,15 @@ module Endnode
         input radioIn @directIn;
     //	    output radioOut;
     submodules:
-        radio: Radio {
+        radio: EndDeviceRadio {
             @display("p=374,249");
         }
         logic: LogicEndnode {
             @display("p=35,28");
         }
-        distortion: Distortion {
-            @display("p=178,171");
-        }
     connections:
         radio.radioIn <-- radioIn;
         //        radio.radioOut --> radioOut;
         radio.fromLogic <-- logic.logicOut;
-        radio.toLogic --> distortion.in;
-        distortion.out --> logic.logicIn;
+        radio.toLogic --> logic.logicIn;
 }

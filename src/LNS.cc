@@ -1,203 +1,80 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "LNS.h"
-#include "common.h"
-#include "LoRaPacket.h"
+
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
-#include <chrono>
-#include <ctime>
 
+#include "common.h"
 
 namespace opp_lora_relay_official {
 
 Define_Module(LNS);
 
-// ================== Pomocnicze ==================
-double LNS::responseTime() const {
-    // jak w Twoim kodzie
-    return par("listeningWindowRXC").doubleValue()
-         + (par("listeningWindowRX1").doubleValue() / 2.0);
+double LNS::responseTime() const
+{
+    return par("listeningWindowRXC").doubleValue() + par("listeningWindowRX1").doubleValue() / 2.0;
 }
 
-// ================== cSimpleModule ==================
 void LNS::initialize()
 {
-    keeper = check_and_cast<Keeper*>(getParentModule()->getSubmodule("keeper"));
-
-    if (hasPar("dedupHoldoff"))
-        dedupHoldoff = par("dedupHoldoff");
-}
-
-inline bool fileExists(const char* path) {
-    std::ifstream f(path); return f.good();
+    keeper = check_and_cast<Keeper *>(getParentModule()->getSubmodule("keeper"));
+    dedupHoldoff = par("dedupHoldoff");
+    relayForwardDelay = par("ts011RelayForwardDelay").doubleValue();
+    networkTimeCorrectionError.setName("TS011 network time correction error");
 }
 
 void LNS::finish()
 {
-    // *** DEDUP ***: porządki
-    for (auto &kv : dedup) {
-        auto &e = kv.second;
-        if (e.timer) cancelAndDelete(e.timer);
-        if (e.representative) delete e.representative;
+    for (auto &item : dedup) {
+        if (item.second.timer != nullptr)
+            cancelAndDelete(item.second.timer);
+        delete item.second.representative;
     }
     dedup.clear();
 
-    if (!receivedFrames.empty()) {
-
-        bool append = !fileExists("exec_result_frames.txt");
-
-        std::ofstream out("exec_result_frames.txt", std::ios::app);
-        if (out.is_open()) {
-            if (append){
-                // Nagłówek kolumn dla czytelności (jedna linia)
-                out << "x,y,sf,rssi,rssi_margin\n";
-            }
-
-            // Stała precyzja, by nie „pływały” liczby
-            out << std::fixed << std::setprecision(2);
-
-            for (const auto& f : receivedFrames) {
-                out << std::fixed << std::setprecision(2)
-                    << f.x << "," << f.y << ","
-                    << f.sf << ","
-                    << f.rssi << ","
-                    << f.rssi_margin << "\n";
-            }
-            out.close();
-        } else {
-            EV << "Unable to open exec_result_frames.txt for writing.\n";
-        }
-    }
+    recordScalar("TS011 network time correction samples", networkTimeCorrectionError.getCount());
+    recordScalar("TS011 mean network time correction error",
+                 networkTimeCorrectionError.getCount() ? networkTimeCorrectionError.getMean() : 0);
+    if (receivedFrames.empty())
+        return;
+    std::ifstream existing("exec_result_frames.txt");
+    const bool needsHeader = !existing.good();
+    existing.close();
+    std::ofstream output("exec_result_frames.txt", std::ios::app);
+    if (!output)
+        return;
+    if (needsHeader)
+        output << "x,y,sf,rssi,rssi_margin\n";
+    output << std::fixed << std::setprecision(2);
+    for (const auto &frame : receivedFrames)
+        output << frame.x << ',' << frame.y << ',' << frame.sf << ','
+               << frame.rssi << ',' << frame.rssi_margin << '\n';
 }
 
 void LNS::handleMessage(cMessage *msg)
 {
-    // 1) *** DEDUP TIMER *** (musi być PRZED gałęzią "zwykły self-message")
     if (msg->isSelfMessage() && msg->getKind() == KIND_DEDUP_TIMER) {
         onDedupTimer(msg);
         return;
     }
-
-    LoRaPacket *msgLoRa = dynamic_cast<LoRaPacket*>(msg);
-
-    // pora wygenerowa� i wys�a� pakiet LoRa
-    if (msg->isSelfMessage())
-    {
-        LoRaPacket *pck = new LoRaPacket(msgLoRa);
-
-        pck->length = 16;
-        //pck->stKind();                //Przypisanie w kostruktorze. JoinAccept   Command  ACK
-        pck->isUplink = false;
-        pck->relayRequired = msgLoRa->isRelayed;
-        pck->isRelayed = false;
-        pck->transmissionPower = 14;
-        //pck->spreadingFactor = 12;
-
-        send(pck, "json$o", msgLoRa->gateLNS);
+    auto *packet = dynamic_cast<LoRaPacket *>(msg);
+    if (packet == nullptr) {
+        delete msg;
+        return;
+    }
+    if (msg->isSelfMessage()) {
+        send(packet, "json$o", packet->gateLNS);
         keeper->recordMessageTransmission(0, ++packetCounter, false);
-
-        EV << simTime() << " LNS Transmitting \n";
-
-        delete msg;
         return;
     }
-
-    if (dynamic_cast<LoRaPacket *>(msg) == nullptr )
-    {
-        EV << simTime() << " LNS Got incorrect LoRa Packet " << " \n";
-        delete msg;
-        return;
-    }
-
     if (msg->arrivedOn("json$i")) {
-
-        int inGate = msg->getArrivalGate()->getIndex();
-        LoRaPacket *ul = check_and_cast<LoRaPacket*>(msg);
-
-        onUplinkArrived(ul, inGate);  // *** DEDUP *** (zatrzymuje lub „wchłania” kopie)
+        onUplinkArrived(packet, msg->getArrivalGate()->getIndex());
         return;
-
-        //below we are certain that message is LoRa Packtet comming from outside
-
-        /*
-        double responseTime = par("listeningWindowRXC").doubleValue() + (par("listeningWindowRX1").doubleValue() / 2);
-        LoRaPacket *response = ((LoRaPacket*)msg)->dupLoRa();
-        response->gateLNS = msg->getArrivalGate()->getIndex();
-        response->spreadingFactor = ul->spreadingFactor;
-
-
-        if (msg->getKind() == (short)MsgType::JOINREQUEST)
-        {
-            response->setKind(MsgType::JOINACCEPT);
-            response->setName("JOIN ACCEPT");
-
-            scheduleAt(simTime() + responseTime, response);
-
-            EV << simTime() << " LNS Sending join accept in " << responseTime <<"s\n";
-        }
-
-        else if (msg->getKind() == JOINREQUEST && msgLoRa->isRelayed == 1)
-        {
-            response->setKind(MsgType::JOINACCEPT);
-            response->isRelayed = 1;
-            response->setName("RELAY JOIN ACCEPT");
-
-            response->length = 14;
-            scheduleAt(simTime() + responseTime, response);
-
-
-            //EV << simTime() << " LNS Sending relay join accept to in " << (par("listeningWindowRX1").doubleValue() * 1,5) <<"\n";
-        }
-
-        else if (msg->getKind() == (short)MsgType::UPLINK)
-        {
-            if (response->ackRequired)
-            {
-                response->setKind(MsgType::ACK);
-                response->setName("ACK");
-
-                response->relayRequired = ((LoRaPacket*)msg)->isRelayed;
-                response->isRelayed = 0;
-
-                response->length = 15;
-
-                if (uniform(0,100) > 95)
-                    response->length = 50;
-
-
-
-                scheduleAt(simTime() + responseTime, response);
-            }
-        }
-
-        else if (msg->getKind() == (short)MsgType::DOWNLINK)
-        {
-            //not for LNS.
-            //return;
-        }
-
-        keeper->recordMessageReception(msg->par("KeeperIndex"), msg->par("PacketId"));
-
-        delete msg;
-        */
     }
+    delete msg;
 }
 
-void LNS::calcADR(LoRaPacket* packet, double rssiMargin)
+void LNS::calcADR(LoRaPacket *packet, double rssiMargin)
 {
     if (rssiMargin > par("ADRtarget").doubleValue() + par("ADRtolerance").doubleValue())
         packet->addPar("ADR-");
@@ -205,147 +82,119 @@ void LNS::calcADR(LoRaPacket* packet, double rssiMargin)
         packet->addPar("ADR+");
 }
 
-void LNS::onUplinkArrived(LoRaPacket* ul, int inGateIdx)
+void LNS::onUplinkArrived(LoRaPacket *packet, int inGateIdx)
 {
-    // Klucze duplikatu bierzemy z parametrów, których już używasz w Keeperze
-    long devIdx = ul->par("KeeperIndex").longValue();  // identyfikator EndDevice
-    long pktId  = ul->par("PacketId").longValue();     // identyfikator pakietu
-    long long K = makeKey(devIdx, pktId);
-
-    // RSSI z pakietu (DOPASUJ nazwę pola, jeśli u Ciebie inna)
-    double rssi = ul->rssi; // <-- DOPASUJ NAZWĘ POLA jeżeli trzeba (np. ul->rssiDbm)
-
-    // Aktualizacja średniej RSSI dla (urządzenie, wejście)
-    avgRssiByDevGate[devIdx][inGateIdx].add(rssi);
-
-    auto it = dedup.find(K);
-    if (it == dedup.end()) {
-        // Pierwsze nadejście — twórz entry i timer hold-off
-        DedupEntry e;
-        e.devIdx = devIdx;
-        e.pktId  = pktId;
-        e.t0     = simTime();
-        e.representative = ul;              // zachowujemy ten egzemplarz
-        e.receptions.push_back({inGateIdx, rssi});
-
-        // self-message kończący okno dedup
-        e.timer = new cMessage("dedupTimer", KIND_DEDUP_TIMER);
-        e.timer->addPar("devIdx").setLongValue(devIdx);
-        e.timer->addPar("pktId").setLongValue(pktId);
-        scheduleAt(simTime() + dedupHoldoff, e.timer);
-
-        dedup.emplace(K, std::move(e));
-    } else {
-        // Kolejna kopia w oknie — tylko zapisujemy i zwalniamy
-        it->second.receptions.push_back({inGateIdx, rssi});
-        delete ul;
+    if (!packet->hasPar("KeeperIndex") || !packet->hasPar("PacketId")) {
+        delete packet;
+        return;
     }
+    const long deviceId = packet->par("KeeperIndex").longValue();
+    const long packetId = packet->par("PacketId").longValue();
+    const long long key = makeKey(deviceId, packetId);
+    avgRssiByDevGate[deviceId][inGateIdx].add(packet->rssi);
+
+    auto found = dedup.find(key);
+    if (found != dedup.end()) {
+        found->second.receptions.push_back({inGateIdx, packet->rssi});
+        delete packet;
+        return;
+    }
+
+    DedupEntry entry;
+    entry.devIdx = deviceId;
+    entry.pktId = packetId;
+    entry.t0 = simTime();
+    entry.representative = packet;
+    entry.receptions.push_back({inGateIdx, packet->rssi});
+    entry.timer = new cMessage("dedupTimer", KIND_DEDUP_TIMER);
+    entry.timer->addPar("devIdx") = deviceId;
+    entry.timer->addPar("pktId") = packetId;
+    scheduleAt(simTime() + dedupHoldoff, entry.timer);
+    dedup.emplace(key, std::move(entry));
 }
 
-void LNS::onDedupTimer(cMessage* self)
+void LNS::onDedupTimer(cMessage *timer)
 {
-    long devIdx = self->par("devIdx").longValue();
-    long pktId  = self->par("pktId").longValue();
-    long long K = makeKey(devIdx, pktId);
+    const long deviceId = timer->par("devIdx").longValue();
+    const long packetId = timer->par("pktId").longValue();
+    const long long key = makeKey(deviceId, packetId);
+    auto found = dedup.find(key);
+    if (found == dedup.end()) {
+        delete timer;
+        return;
+    }
+    DedupEntry entry = std::move(found->second);
+    dedup.erase(found);
+    delete timer;
 
-    auto it = dedup.find(K);
-    if (it == dedup.end()) { delete self; return; }
-
-    // Zabierz wpis i skasuj timer
-    DedupEntry e = std::move(it->second);
-    dedup.erase(it);
-    delete self;
-
-    // Wybierz najlepsze wyjście wg ŚREDNIEGO RSSI dla tego urządzenia
-    int bestGate = -1;
+    int bestGate = 0;
     double bestMean = -std::numeric_limits<double>::infinity();
-    auto &perGate = avgRssiByDevGate[devIdx];
-
-    // Rozważamy bramki, które faktycznie widziały bieżący UL
-    for (const auto& r : e.receptions) {
-        auto itg = perGate.find(r.gateIdx);
-        double mean = (itg != perGate.end()) ? itg->second.mean() : r.rssi; // fallback
+    for (const auto &reception : entry.receptions) {
+        const double mean = avgRssiByDevGate[deviceId][reception.gateIdx].mean();
         if (mean > bestMean) {
             bestMean = mean;
-            bestGate = r.gateIdx;
+            bestGate = reception.gateIdx;
         }
     }
-    if (bestGate < 0) bestGate = 0;
-
-    // Przetwórz JEDEN, zdeduplikowany uplink (wygeneruj ewentualny DL)
-    processUniqueUplink(e, bestGate);
+    processUniqueUplink(entry, bestGate);
 }
 
-void LNS::processUniqueUplink(DedupEntry& e, int preferOutGate)
+void LNS::processUniqueUplink(DedupEntry &entry, int outputGate)
 {
-    LoRaPacket* ul = e.representative;
-
-    // Pojedynczy wpis do Keepera (tak jak wcześniej, ale TYLKO raz)
-    keeper->recordMessageReception(ul->par("KeeperIndex"), ul->par("PacketId"));
-
-    receivedFrames.push_back(ReceivedFrame{
-        static_cast<double>(ul->senderPositionX),
-        static_cast<double>(ul->senderPositionY),
-        static_cast<short>(ul->spreadingFactor),
-        static_cast<double>(ul->rssi),
-        static_cast<double>(ul->rssi_margin)
-    });
-
-    // Oblicz, kiedy powinna być odpowiedź (jak u Ciebie)
-    const double respT = responseTime();
-    const simtime_t when = e.t0 + respT;
-
-    // Przygotuj odpowiedź na podstawie logiki z Twojego LNS
-    LoRaPacket *response = ul->dupLoRa();
-    response->gateLNS = preferOutGate; // to wyjście wybierze gałąź self-message
-
-    // JOIN REQUEST (z rozróżnieniem na relay)
-    if (ul->getKind() == (short)MsgType::JOINREQUEST)
-    {
-        if (ul->isRelayed == 1) {
-            response->setKind(MsgType::JOINACCEPT);
-            response->isRelayed = 1;
-            response->setName("RELAY JOIN ACCEPT");
-            response->length = 14;
-            scheduleAt(when, response);
-        } else {
-            response->setKind(MsgType::JOINACCEPT);
-            response->setName("JOIN ACCEPT");
-            scheduleAt(when, response);
-        }
-        EV << simTime() << " LNS Scheduling join accept in " << (when - simTime()) << "s via json[" << preferOutGate << "]\n";
+    LoRaPacket *uplink = entry.representative;
+    keeper->recordMessageReception(uplink->par("KeeperIndex"), uplink->par("PacketId"));
+    const bool forwarded = uplink->encapsulated && uplink->fPort == LA_FPORT_RELAY;
+    if (forwarded && uplink->hasPar("OriginalUplinkEnd")) {
+        const double estimatedOriginalEnd = entry.t0.dbl() - uplink->calcMsgDuration() - relayForwardDelay;
+        networkTimeCorrectionError.collect(estimatedOriginalEnd -
+            uplink->par("OriginalUplinkEnd").doubleValue());
     }
-    // Zwykły UPLINK wymagający ACK
-    else if (ul->getKind() == (short)MsgType::UPLINK)
-    {
-        if (response->ackRequired)
-        {
-            response->setKind(MsgType::ACK);
-            response->setName("ACK");
+    const double accessRssi = forwarded ? uplink->uplinkRssiMetadata : uplink->rssi;
+    const double accessMargin = forwarded ? accessRssi + 114.0 : uplink->rssi_margin;
+    receivedFrames.push_back({forwarded ? uplink->uplinkSenderPositionX : uplink->senderPositionX,
+        forwarded ? uplink->uplinkSenderPositionY : uplink->senderPositionY,
+        static_cast<short>(forwarded ? uplink->originalSpreadingFactor : uplink->spreadingFactor),
+        accessRssi, accessMargin});
 
-            response->relayRequired = ul->isRelayed;
-            response->isRelayed = 0;
-            response->length = 15;
-            if (uniform(0,100) > 95)
-                response->length = 50;
+    const int logicalKind = forwarded ? uplink->originalKind : uplink->getKind();
+    auto *response = uplink->dupLoRa();
+    response->gateLNS = outputGate;
+    response->isUplink = false;
+    response->isRelayed = false;
+    response->relayRequired = uplink->isRelayed;
+    bool sendResponse = false;
 
-            calcADR(response, ul->rssi_margin);
-
-            scheduleAt(when, response);
-            EV << simTime() << " LNS Scheduling ACK in " << (when - simTime()) << "s via json[" << preferOutGate << "]\n";
-        }
-        else {
-            delete response; // brak odpowiedzi wymaganej => nic nie wysyłamy
-        }
+    if (logicalKind == MsgType::JOINREQUEST) {
+        response->setKind(MsgType::JOINACCEPT);
+        response->setName("JOIN ACCEPT");
+        response->length = 14;
+        sendResponse = true;
     }
-    else {
-        // DOWNLINK lub inne — LNS nie odpowiada
+    else if (logicalKind == MsgType::UPLINK && uplink->ackRequired) {
+        response->setKind(MsgType::ACK);
+        response->setName("ACK");
+        response->length = 15;
+        calcADR(response, accessMargin);
+        sendResponse = true;
+    }
+
+    if (sendResponse && forwarded) {
+        response->originalKind = response->getKind();
+        response->originalLength = response->length;
+        response->originalSpreadingFactor = uplink->originalSpreadingFactor;
+        response->setKind(MsgType::FORWARDDOWNLINK);
+        response->setName("TS011 ForwardDownlinkReq");
+        response->encapsulated = true;
+        response->fPort = LA_FPORT_RELAY;
+        response->length = std::min(255, response->originalLength + LORAWAN_FRAME_OVERHEAD);
+        response->relayRequired = true;
+    }
+
+    if (sendResponse)
+        scheduleAt(std::max(simTime(), entry.t0 + responseTime()), response);
+    else
         delete response;
-    }
-
-    // Sprzątanie oryginału UL
-    delete ul;
+    delete uplink;
 }
 
-
-} //namespace
+} // namespace opp_lora_relay_official

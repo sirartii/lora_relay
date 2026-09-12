@@ -1,65 +1,36 @@
-/*
- * common.h
- *
- *  Created on: Jan 5, 2022
- *      Author: webs
- */
-
 #ifndef COMMON_H_
 #define COMMON_H_
 
 namespace opp_lora_relay_official {
 
-const int REPLAY_TIMEOUT = 15;        //time in seconds from TX start to logcial no response detection
-const int WOR_DATA_DELAY = 5;
-const int WOR_DATA_LENGTH = 5;      //1+4 or 1+14 according to TS011 p.22
-const int RELAY_FWD_DELAY = 1;
-const int WOR_TO_UPLINK_TIMEOUT = 2;   //max czas aktywno�ci radia po odebraniu WOR do odebrania UPLINK
+constexpr int REPLAY_TIMEOUT = 15;
+constexpr int TS011_JOIN_WOR_LENGTH = 5;
+constexpr int TS011_UPLINK_WOR_LENGTH = 15;
+constexpr int TS011_WOR_ACK_LENGTH = 7;
+constexpr int TS011_UPLINK_METADATA_LENGTH = 6;
+constexpr int LORAWAN_FRAME_OVERHEAD = 13;
+constexpr int RELAY_JOIN_LENGTH = 10;
+constexpr int LA_FPORT_RELAY = 226;
 
-const int RELAY_JOIN_LENGTH = 10;
-
-enum DevType
-{
-    DEVUNKNOWN, ENDNODE, RELAY, GATEWAY, IPBRIDGE
-};
-
-enum RetransmissionModel
-{
-    UNKNOWN,
-    TS011,
-    EP431
-};
+enum DevType { DEVUNKNOWN, ENDNODE, RELAY, GATEWAY, IPBRIDGE };
+enum RetransmissionModel { UNKNOWN, TS011, EP431 };
+enum class Ts011SyncState { INITIALIZED, UNSYNCHRONIZED, SYNCHRONIZED };
+enum class WorType { RELAY_JOIN_REQUEST = 0, CLASS_A_UPLINK = 1 };
 
 struct RadioActivity
 {
-    enum ra
-    {
-        UNKNOWN,
-        RADIOOFF,
-        LISTENING,
-        WOR,            //Wake up on radio TS011
-        EWOR,           //Wake up on radio M&T
-        RECEIVING,
-        TRANSMITTING,
-        TIMER
-    };
+    enum ra { UNKNOWN, RADIOOFF, LISTENING, WOR, EWOR, RECEIVING, TRANSMITTING, TIMER };
 };
 
-enum EndDeviceState
-{
-    OFFLINE,  //also init
-    JOIN_DIRECT,
-    JOIN_RELAY,
-    ONLINE_DIRECT,
-    ONLINE_RELAYED,
-};
-
+enum EndDeviceState { OFFLINE, JOIN_DIRECT, JOIN_RELAY, ONLINE_DIRECT, ONLINE_RELAYED };
 
 struct SelfMsgType
 {
-    enum sm
-    {
-        UNKNOWN, RADIOINIT, WINDOWTIMER, RXTIMER, TXTIMER, RXC, RX1, RX2, RXR, TXWINDOW1, TXWINDOW2, TXREPEAT
+    enum sm {
+        UNKNOWN, RADIOINIT, WINDOWTIMER, RXTIMER, TXTIMER, RXC, RX1, RX2, RXR,
+        TXWINDOW1, TXWINDOW2, TXREPEAT, RELAY_FORWARD, RELAY_RX_TIMEOUT,
+        WORACK_RX_OPEN, WORACK_RX_CLOSE, TS011_SEND_WOR, TS011_SEND_DATA,
+        RESPONSE_TIMEOUT
     };
 };
 
@@ -67,9 +38,7 @@ enum MsgType
 {
     MSGUNKNOWN,
     MSGWOR,
-    //WORRELAYJOIN,
-    //WORRELAYUPLINK,
-    //WORRELAYJOINACCEPT,
+    MSGWORACK,
     JOINREQUEST,
     JOINACCEPT,
     FORWARDUPLINK,
@@ -78,16 +47,11 @@ enum MsgType
     DOWNLINK,
     ACK,
     TIMEOUT,
-
-
-    //wiadomoci sterujące , nie to tranmisji
     RESET_ADR
 };
 
-struct Coords
-{
-    double x, y;
-};
-}
+struct Coords { double x, y; };
 
-#endif /* COMMON_H_ */
+} // namespace opp_lora_relay_official
+
+#endif

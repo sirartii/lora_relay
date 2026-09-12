@@ -14,9 +14,8 @@
 //
 
 package opp_lora_relay_official;
-import opp_lora_relay_official.Radio;
+import opp_lora_relay_official.IpBridgeRadio;
 import opp_lora_relay_official.LogicIpBridge;
-import opp_lora_relay_official.Distortion;
 
 module IpBridge
 {
@@ -29,19 +28,15 @@ module IpBridge
         inout json;    // idealne IP do LNS
 
     submodules:
-        radio: Radio {
+        radio: IpBridgeRadio {
             @display("p=368,347");
-        }
-        distortion: Distortion {
-            @display("p=280,169");
         }
         logic: LogicIpBridge {
             @display("p=105,99");
         }
     connections:
         radio.radioIn <-- radioIn;
-        radio.toLogic --> distortion.in;
-        distortion.out --> logic.logicIn;
+        radio.toLogic --> logic.logicIn;
 
         // logika -> radio (obecnie nieużywane; zostawiamy dla kompatybilności)
         radio.fromLogic <-- logic.logicOut;
