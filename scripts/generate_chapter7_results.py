@@ -143,7 +143,12 @@ def parse_args() -> argparse.Namespace:
         help="scenariusze tabeli, np. t01,t05,t13 albo all",
     )
     parser.add_argument("--n-values", default="1,2,3,4,5,6,7,8")
-    parser.add_argument("--populations", default="50,100,150,200,250,300,350,400,450,500,550")
+    parser.add_argument("--populations", default="50,100,150,200,250,300,350,400,450,500")
+    parser.add_argument(
+        "--figure-713-models",
+        default="all",
+        help="modele rys. 7.13, np. t02,t11 albo all",
+    )
     parser.add_argument("--rx-current-ma", type=float, default=4.6)
     parser.add_argument(
         "--table-source",
@@ -175,6 +180,18 @@ def select_scenarios(value: str) -> list[Scenario]:
     if unknown:
         raise ValueError(f"nieznane scenariusze: {', '.join(unknown)}")
     return [SCENARIO_BY_KEY[key] for key in keys]
+
+
+def select_figure_713_models(value: str) -> list[str]:
+    if value.strip().lower() == "all":
+        return list(FIGURE_713_MODELS)
+    keys = [part.strip().lower() for part in value.split(",") if part.strip()]
+    unknown = [key for key in keys if key not in FIGURE_713_MODELS]
+    if unknown:
+        raise ValueError(f"nieznane modele rys. 7.13: {', '.join(unknown)}")
+    if not keys:
+        raise ValueError("lista modeli rys. 7.13 nie może być pusta")
+    return keys
 
 
 def format_override(key: str, value: object) -> str:
@@ -710,10 +727,12 @@ def plot_figure_712(root: Path) -> Path:
     return output
 
 
-def plot_figure_713(root: Path, populations: Sequence[int]) -> Path:
+def plot_figure_713(
+    root: Path, populations: Sequence[int], models: Sequence[str] = FIGURE_713_MODELS
+) -> Path:
     configure_style()
     figure, ax = plt.subplots(figsize=(11.0, 7.0), constrained_layout=True)
-    for key in FIGURE_713_MODELS:
+    for key in models:
         scenario = SCENARIO_BY_KEY[key]
         summaries = [
             variant_summary(root / "sweeps" / "figure_7_13" / key / f"central_ED_{count:03d}")
@@ -724,7 +743,8 @@ def plot_figure_713(root: Path, populations: Sequence[int]) -> Path:
         ax.errorbar(total_devices, means, yerr=errors, marker="o", capsize=2.5, linewidth=1.4, label=f"Test {scenario.number}: {scenario.label}")
     ax.set_xlabel("Łączna liczba urządzeń końcowych")
     ax.set_ylabel("Prawdopodobieństwo dostarczenia pakietu UL [%]")
-    ax.set_title("Porównanie modeli z testów 2, 8, 9, 10, 11 i 12")
+    model_numbers = ", ".join(str(SCENARIO_BY_KEY[key].number) for key in models)
+    ax.set_title(f"Porównanie modeli z testów {model_numbers}")
     ax.legend(fontsize=8)
     output = root / "comparisons" / "figure_7_13_delivery_vs_population.png"
     save_plot(figure, output)
@@ -886,8 +906,8 @@ def write_readme(args: argparse.Namespace, generated: Sequence[Path]) -> None:
             "- N oznacza liczbę ramek wysyłanych przez ED w każdym oknie transmisyjnym.",
             "- Rysunki 7.2 oraz 7.3/7.5 używają N=1…8; odpowiednio okien 3 h i 12 h.",
             "- Rysunek 7.12 używa jednego całodobowego okna i jednej ramki na dobę.",
-            "- Rysunek 7.13 używa 50, 100, …, 550 urządzeń centralnych; "
-            "wyspy dodają łącznie 10% populacji.",
+            "- Rysunek 7.13 używa 50, 100, …, 500 urządzeń centralnych; "
+            "wyspy dodają łącznie 10% populacji, więc oś X obejmuje 55–550 ED.",
             "- Pierwsze 4 dni są fazą inicjalizacji i nie są wliczane do statystyk jakości; "
             "energia jest raportowana dla całego horyzontu symulacji.",
             "- Domyślnie użyto poprawnej wartości 4.6 mA dla RX. Wartość 4.9 mA "
@@ -924,6 +944,7 @@ def main() -> int:
     scenarios = select_scenarios(args.scenarios)
     n_values = parse_int_list(args.n_values)
     populations = parse_int_list(args.populations)
+    figure_713_models = select_figure_713_models(args.figure_713_models)
 
     if args.list:
         print("Scenariusze tabeli:")
@@ -931,6 +952,7 @@ def main() -> int:
             print(f"  {scenario.key}: {scenario.label}")
         print(f"N: {n_values}")
         print(f"Populacje centralne: {populations}")
+        print(f"Modele rys. 7.13: {figure_713_models}")
         return 0
 
     if not args.plots_only:
@@ -1032,7 +1054,7 @@ def main() -> int:
 
     if "7.13" in sections:
         base = args.output / "sweeps" / "figure_7_13"
-        for key in FIGURE_713_MODELS:
+        for key in figure_713_models:
             scenario = SCENARIO_BY_KEY[key]
             for count in populations:
                 print(f"Rys. 7.13: test {scenario.number}, centralne ED={count}", flush=True)
@@ -1054,7 +1076,7 @@ def main() -> int:
                     args=args,
                     env=env,
                 )
-        generated.append(plot_figure_713(args.output, populations))
+        generated.append(plot_figure_713(args.output, populations, figure_713_models))
 
     write_readme(args, generated)
     manifest = {
@@ -1065,6 +1087,7 @@ def main() -> int:
         "scenarios": [scenario.key for scenario in scenarios],
         "n_values": n_values,
         "central_populations": populations,
+        "figure_713_models": figure_713_models,
         "generated_files": [str(path.relative_to(args.output)) for path in generated if path.exists()],
     }
     (args.output / "manifest.json").write_text(
