@@ -72,6 +72,16 @@ class TopologyParserTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "declares 3 EDs"):
                 parse_topology(path)
 
+    def test_lenient_mode_skips_incomplete_block_and_continues(self) -> None:
+        bad = SAMPLE.replace("ED             = 2", "ED             = 3", 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "exec_results_topology.txt"
+            path.write_text(bad, encoding="utf-8")
+            topology = parse_topology(path, strict=False)
+
+        self.assertEqual(len(topology.runs), 1)
+        self.assertEqual(topology.runs[0].devices[0].x, 510.0)
+
 
 if __name__ == "__main__":
     unittest.main()

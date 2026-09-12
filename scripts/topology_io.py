@@ -194,10 +194,15 @@ def parse_topology(path: str | Path, *, strict: bool = True) -> TopologyFile:
                 devices.append(node)
                 i += 1
 
-            if strict and len(devices) != declared_count:
-                raise ValueError(
-                    f"run {len(runs)} declares {declared_count} EDs but contains {len(devices)} rows"
-                )
+            if len(devices) != declared_count:
+                if strict:
+                    raise ValueError(
+                        f"run {len(runs)} declares {declared_count} EDs but contains {len(devices)} rows"
+                    )
+                # A simulator terminated while appending this block.  Do not
+                # mix a partial topology into an aggregate, but keep scanning
+                # because later, complete blocks may still exist in the file.
+                continue
 
             runs.append(
                 TopologyRun(

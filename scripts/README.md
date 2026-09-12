@@ -69,6 +69,6 @@ python -m pip install -r C:\Omnet\lora_relay\scripts\requirements.txt
   C:\wyniki -o C:\wyniki\topology_plots --lenient
 ```
 
-Opcja `--lenient` pozwala pominąć niedokończony blok na końcu pliku po
-przerwanym uruchomieniu. Domyślnie parser działa rygorystycznie i zgłasza taki
-problem.
+Opcja `--lenient` pomija każdy niedokończony lub uszkodzony blok i kontynuuje
+czytanie następnych przebiegów. Domyślnie parser działa rygorystycznie i zgłasza
+taki problem.
