@@ -143,7 +143,7 @@ def parse_args() -> argparse.Namespace:
         help="scenariusze tabeli, np. t01,t05,t13 albo all",
     )
     parser.add_argument("--n-values", default="1,2,3,4,5,6,7,8")
-    parser.add_argument("--populations", default="50,100,150,200,250,300,350,400,450,500")
+    parser.add_argument("--populations", default="50,100,150,200,250,300,350,400,450,500,550")
     parser.add_argument("--rx-current-ma", type=float, default=4.6)
     parser.add_argument(
         "--table-source",
@@ -886,7 +886,7 @@ def write_readme(args: argparse.Namespace, generated: Sequence[Path]) -> None:
             "- N oznacza liczbę ramek wysyłanych przez ED w każdym oknie transmisyjnym.",
             "- Rysunki 7.2 oraz 7.3/7.5 używają N=1…8; odpowiednio okien 3 h i 12 h.",
             "- Rysunek 7.12 używa jednego całodobowego okna i jednej ramki na dobę.",
-            "- Rysunek 7.13 używa 50, 100, …, 500 urządzeń centralnych; "
+            "- Rysunek 7.13 używa 50, 100, …, 550 urządzeń centralnych; "
             "wyspy dodają łącznie 10% populacji.",
             "- Pierwsze 4 dni są fazą inicjalizacji i nie są wliczane do statystyk jakości; "
             "energia jest raportowana dla całego horyzontu symulacji.",

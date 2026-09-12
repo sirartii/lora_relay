@@ -91,6 +91,9 @@ wznawiać — pomija kompletne przebiegi. Podgląd planu bez uruchamiania symula
 & $python C:\Omnet\lora_relay\scripts\generate_chapter7_results.py --list
 ```
 
+Wykres zbiorczy 7.13 jest domyślnie liczony dla 50, 100, …, 550 urządzeń
+centralnych; dwie wyspy zwiększają całkowitą liczbę ED o 10%.
+
 Przykład uruchomienia tylko dodatkowego scenariusza:
 
 ```powershell
