@@ -66,6 +66,9 @@ public:
 
     const std::vector<Node>& returnRadioDevices() const;
     bool hasRelayPath() const;
+    bool epRelayEligible(int device) const;
+    bool ts011RelayEligible(int device) const;
+    void recordEpRecovery(int device, int packet, int event);
     void updateEndnodeState(int index, EndDeviceState status);
     void recordFrameTransmission(int NodeFrom, double msgDuration);
     void recordFrameReception(int NodeFrom, int nodeTo, float RSSI, bool reveived);
@@ -73,6 +76,8 @@ public:
     void recordEnergyConsumption(int Node, double consumption);
 
     void recordMessageTransmission(int NodeFrom, int MsgNo, bool isUplink);
+    void recordFrameDetails(int device, int packet, bool join, bool ack, bool relayed, simtime_t applicationTime);
+    void recordActualRelayUplink(int device, int packet, int relay);
     //void recordMessageReception(int NodeFrom, int MsgNo);
     void recordResultsToFile();
     void recordOfflineTime(int Node, double OfflineTime);
@@ -132,6 +137,25 @@ public:
     std::unordered_set<uint64_t> ulTransmitted_; // pakiety UL nadane po okresie inicjalizacji
     std::unordered_set<uint64_t> ulCollided_;    // było co najmniej jedno odrzucenie UL z powodu kolizji
     std::unordered_set<uint64_t> ulDelivered_;   // LNS odebrał UL (recordMessageReception)
+    // Always classified, also when the optional per-frame export is disabled.
+    std::unordered_set<uint64_t> dataUlTransmitted_;
+    // First application-level transmit time.  Retransmissions of the same
+    // (device, packet) key must not reset the end-to-end delay origin.
+    std::unordered_map<uint64_t, simtime_t> ulFirstTransmissionTime_;
+    struct FrameDetails {
+        bool join = false;
+        bool ack = false;
+        simtime_t applicationTime;
+        simtime_t receptionTime = -1;
+        int attempts = 0;
+        int relayAttempts = 0;
+        int actualRelayTx = 0;
+        int actualRelayIndex = -1;
+    };
+    std::unordered_map<uint64_t, FrameDetails> frameDetails_;
+    struct DiagnosticEvent { int device; int packet; int code; double time; };
+    std::vector<DiagnosticEvent> actualRelayEvents_;
+    std::vector<DiagnosticEvent> epRecoveryEvents_;
     // DL
     std::unordered_set<uint64_t> dlCollided_;    // EndDevice odrzucił DL z powodu kolizji
     std::unordered_set<uint64_t> dlDelivered_;   // EndDevice odebrał DL (ACK/JOIN ACCEPT)

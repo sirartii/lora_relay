@@ -2,6 +2,8 @@
 #define OPP_LORA_RELAY_LOGIC_ENDNODE_H
 
 #include <omnetpp.h>
+#include <vector>
+#include <deque>
 
 #include "Keeper.h"
 #include "common.h"
@@ -25,11 +27,16 @@ class LogicEndnode : public omnetpp::cSimpleModule
   private:
     void scheduleInitialWindow(omnetpp::cMessage *timer, int windowIndex);
     void scheduleFollowingWindow(omnetpp::cMessage *timer, int windowIndex);
+    void planWindow(omnetpp::cMessage *timer, int windowIndex, long long firstMs, long long endMs);
     void beginApplicationTransmission();
     void scheduleTs011Wor(int packetId, bool join, bool ackRequired);
     void sendTs011Wor(omnetpp::cMessage *event);
     void sendDataFrame(int packetId, bool join, bool ackRequired, bool relayed);
-    void startResponseTimeout();
+    void startResponseTimeout(omnetpp::cMessage *txComplete);
+    void startNextTransmission();
+    void startActiveAttempt();
+    void completeTransaction();
+    void updateSessionState();
     void handleResponseTimeout(omnetpp::cMessage *msg);
     void handleDownlink(LoRaPacket *packet);
     void handleWorAck(LoRaPacket *packet);
@@ -51,12 +58,38 @@ class LogicEndnode : public omnetpp::cSimpleModule
     int windowsPerDay = 2;
     int framesPerWindowMin = 1;
     int framesPerWindowMax = 1;
-    int framesRemaining[2]{1, 1};
+    long long windowStartMs[2]{0, 0};
+    std::vector<long long> windowDeadlinesMs[2];
+    std::size_t nextWindowDeadline[2]{0, 0};
     omnetpp::cMessage *windowTimers[2]{nullptr, nullptr};
     omnetpp::cMessage *responseTimer = nullptr;
+    omnetpp::cMessage *nextTransactionTimer = nullptr;
+    std::deque<omnetpp::simtime_t> pendingApplicationTimes;
+    bool transactionActive = false;
+    bool sessionJoined = false;
+    bool relayMode = false;
+    bool activeJoin = false;
+    bool activeRelayed = false;
+    bool activeAckRequired = false;
+    bool activeFallbackUsed = false;
+    int activePacketId = -1;
+    int activeAttempt = 0;
+    int dataCounter = 0;
+    int joinAttemptCounter = 0;
+    int ackEvery = 5;
+    int ts011MissedAcksToRelay = 1;
+    int ts011JoinRelayEvery = 4;
+    omnetpp::simtime_t relayHoldoffUntil;
+    bool relayForwardingDisabled = false;
+    omnetpp::simtime_t activeApplicationTime;
+    long ignoredResponses = 0;
+    long confirmedDataTransmitted = 0;
+    long joinTransmitted = 0;
+    long relayFallbacks = 0;
+    long forwardingHoldoffs = 0;
+    double totalMacQueueDelay = 0;
 
     int packetCounter = 0;
-    int lastAckRequestCount = 0;
     int missedResponse = 0;
     bool waitingResponse = false;
     int applicationPayloadLength = 51;
@@ -69,8 +102,8 @@ class LogicEndnode : public omnetpp::cSimpleModule
     omnetpp::simsignal_t wakeupRelay;
 
     int ts011EndDeviceSpreadingFactor = 10;
-    int ts011DefaultWorChannel = 1;
-    int ts011SecondWorChannel = 2;
+    int ts011DefaultWorChannel = 10;
+    int ts011SecondWorChannel = 11;
     int ts011UplinkChannel = 1;
     bool ts011SecondChannelConfigured = false;
     double ts011CadPeriodicity = 1;
@@ -87,7 +120,7 @@ class LogicEndnode : public omnetpp::cSimpleModule
     bool pendingWorAcknowledged = false;
     int consecutiveWorWithoutAck = 0;
     int lastWorPreambleSymbols = 0;
-    int lastWorChannel = 1;
+    int lastWorChannel = 10;
     omnetpp::simtime_t tLast;
     omnetpp::simtime_t tRef;
 

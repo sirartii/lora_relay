@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "LoRaPacket.h"
+#include "Keeper.h"
 
 namespace opp_lora_relay_official {
 
@@ -60,7 +61,7 @@ void LogicRelay::initialize()
     model = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
     worAckDelay = par("ts011WorAckDelay").doubleValue();
     relayForwardDelay = par("ts011RelayForwardDelay").doubleValue();
-    rxrDelay = par("ts011RxrDelay").doubleValue();
+    rxrDelay = par(model == RetransmissionModel::TS011 ? "ts011RxrDelay" : "epRxrDelay").doubleValue();
     worAckProbability = par("ts011WorAckProbability").doubleValue();
     cadPeriodicityMs = static_cast<int>(std::lround(par("ts011CadPeriodicity").doubleValue() * 1000));
     cadToRxSymbols = par("ts011CadToRxSymbols").intValue();
@@ -171,7 +172,8 @@ LogicRelay::TokenBucket &LogicRelay::deviceBucket(int deviceId)
 
 bool LogicRelay::canForward(int deviceId, bool joinRequest, bool consume)
 {
-    if (!forwardingEnabled)
+    auto *keeper = check_and_cast<Keeper *>(getParentModule()->getParentModule()->getSubmodule("keeper"));
+    if (!forwardingEnabled || !keeper->ts011RelayEligible(deviceId))
         return false;
     TokenBucket &perDevice = deviceBucket(deviceId);
     const bool available = globalBucket.available(simTime()) &&
@@ -191,7 +193,9 @@ bool LogicRelay::canForward(int deviceId, bool joinRequest, bool consume)
 
 int LogicRelay::forwardingStatus(int deviceId)
 {
-    if (!forwardingEnabled)
+    auto *keeper = check_and_cast<Keeper *>(getParentModule()->getParentModule()->getSubmodule("keeper"));
+    // Existing Forward=3 handling informs an excluded ED to use direct access.
+    if (!forwardingEnabled || !keeper->ts011RelayEligible(deviceId))
         return 3;
     if (canForward(deviceId, false, false))
         return 0;
@@ -213,7 +217,32 @@ void LogicRelay::handleWor(LoRaPacket *packet)
     context.uplinkChannel = packet->uplinkChannel;
     context.counter = packet->worFrameCounter;
     context.receivedAt = simTime();
-    worContexts[packet->senderId] = context;
+    context.packetId = packet->par("PacketId").longValue();
+    context.attemptId = packet->par("AttemptId").longValue();
+    const bool join = packet->worType == WorType::RELAY_JOIN_REQUEST;
+    auto *keeper = check_and_cast<Keeper *>(getParentModule()->getParentModule()->getSubmodule("keeper"));
+    const bool onWhitelist = keeper->ts011RelayEligible(packet->senderId);
+    const bool allowedJoin = !join || joinRequestAllowed(packet);
+    const bool admitted = allowedJoin && canForward(packet->senderId, join, false);
+    if (!onWhitelist) ++whitelistDrops;
+    else if (!allowedJoin) ++joinFilterDrops;
+    else if (!admitted) ++forwardingLimitDrops;
+    if (admitted) {
+        LoRaPacket timing("WOR ACK timing", MsgType::MSGWORACK);
+        timing.length = TS011_WOR_ACK_LENGTH;
+        timing.spreadingFactor = packet->spreadingFactor;
+        context.until = simTime() + par("ts011WorDataDelay").doubleValue() +
+            (join ? 0 : worAckDelay + timing.calcMsgDuration()) + par("ts011UplinkListenTimeout").doubleValue();
+        worContexts[packet->senderId] = context;
+        auto *grant = new cMessage("admitted relay access", MsgType::RELAY_ACCESS_GRANT);
+        grant->addPar("SenderId") = packet->senderId;
+        grant->addPar("PacketId") = context.packetId;
+        grant->addPar("AttemptId") = context.attemptId;
+        grant->addPar("channel") = context.uplinkChannel;
+        grant->addPar("until") = context.until.dbl();
+        send(grant, "logicOut");
+    }
+    else worContexts.erase(packet->senderId);
 
     if (model == RetransmissionModel::TS011 && packet->worType == WorType::CLASS_A_UPLINK &&
         uniform(0, 1) <= worAckProbability) {
@@ -231,6 +260,7 @@ void LogicRelay::handleWor(LoRaPacket *packet)
         ack->relayClockAccuracyPpm = relayClockAccuracyPpm;
         ack->forwardStatus = forwardingStatus(packet->senderId);
         ack->relayDataRate = relaySpreadingFactor;
+        ack->addPar("TxDeadline") = (simTime() + worAckDelay + SimTime(1, SIMTIME_MS)).dbl();
         scheduleAt(simTime() + worAckDelay, ack);
         ++worAcknowledged;
     }
@@ -245,6 +275,13 @@ void LogicRelay::handleAccessUplink(LoRaPacket *packet)
     }
     const bool join = packet->getKind() == MsgType::JOINREQUEST;
     if (model == RetransmissionModel::EP431) {
+        auto *keeper = check_and_cast<Keeper *>(getParentModule()->getParentModule()->getSubmodule("keeper"));
+        // Static designation policy in the existing simplified EP model.
+        // Evaluate after PHY reception: denied frames can still occupy the air.
+        if (!keeper->epRelayEligible(packet->par("KeeperIndex").longValue())) {
+            delete packet;
+            return;
+        }
         packet->isRelayed = true;
         packet->addPar("OriginalUplinkEnd") = simTime().dbl();
         scheduleAt(simTime(), packet);
@@ -258,16 +295,21 @@ void LogicRelay::handleAccessUplink(LoRaPacket *packet)
         return;
     }
 
-    if (worContexts.find(packet->senderId) == worContexts.end()) {
+    const auto context = worContexts.find(packet->senderId);
+    if (context == worContexts.end() || context->second.until < simTime() ||
+        context->second.packetId != packet->par("PacketId").longValue() ||
+        context->second.attemptId != packet->par("AttemptId").longValue()) {
+        ++staleContextDrops;
         delete packet;
         return;
     }
+    worContexts.erase(context);
     if (!canForward(packet->senderId, join, true)) {
         ++forwardingLimitDrops;
         delete packet;
         return;
     }
-    const int forwardedLength = packet->length + LORAWAN_FRAME_OVERHEAD + TS011_UPLINK_METADATA_LENGTH;
+    const int forwardedLength = packet->phyPayloadLength() + TS011_UPLINK_METADATA_LENGTH;
     if (forwardedLength > maximumForwardedPayload || forwardedLength > 255) {
         ++payloadLimitDrops;
         delete packet;
@@ -292,6 +334,7 @@ void LogicRelay::handleAccessUplink(LoRaPacket *packet)
     packet->isUplink = true;
     packet->rxrEligible = false;
     packet->addPar("OriginalUplinkEnd") = simTime().dbl();
+    packet->addPar("TxDeadline") = (simTime() + relayForwardDelay + SimTime(1, SIMTIME_MS)).dbl();
     scheduleAt(simTime() + relayForwardDelay, packet);
     ++uplinksForwarded;
 }
@@ -316,7 +359,10 @@ void LogicRelay::handleForwardDownlink(LoRaPacket *packet)
     packet->relayRequired = false;
     packet->isUplink = false;
     packet->channel = rxrChannel;
-    const simtime_t target = std::max(simTime(), SimTime(originalEnd + rxrDelay));
+    const simtime_t target = SimTime(originalEnd + rxrDelay);
+    if (simTime() > target) { delete packet; return; }
+    if (packet->hasPar("TxDeadline")) packet->par("TxDeadline") = (target + SimTime(1, SIMTIME_MS)).dbl();
+    else packet->addPar("TxDeadline") = (target + SimTime(1, SIMTIME_MS)).dbl();
     scheduleAt(target, packet);
     ++downlinksForwarded;
 }
@@ -360,6 +406,7 @@ void LogicRelay::handleMessage(cMessage *msg)
 
 void LogicRelay::finish()
 {
+    recordScalar("TS011 whitelist refusals", whitelistDrops);
     recordScalar("TS011 WOR received", worReceived);
     recordScalar("TS011 WOR acknowledged", worAcknowledged);
     recordScalar("TS011 uplinks forwarded", uplinksForwarded);
@@ -367,6 +414,7 @@ void LogicRelay::finish()
     recordScalar("TS011 forwarding-limit drops", forwardingLimitDrops);
     recordScalar("TS011 payload-limit drops", payloadLimitDrops);
     recordScalar("TS011 Join-Request filter drops", joinFilterDrops);
+    recordScalar("TS011 stale WOR context drops", staleContextDrops);
 }
 
 } // namespace opp_lora_relay_official

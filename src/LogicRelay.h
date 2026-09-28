@@ -40,6 +40,9 @@ class LogicRelay : public omnetpp::cSimpleModule
         int uplinkChannel = 1;
         unsigned int counter = 0;
         omnetpp::simtime_t receivedAt;
+        int packetId = -1;
+        int attemptId = 0;
+        omnetpp::simtime_t until;
     };
 
     struct JoinFilterRule {
@@ -66,7 +69,7 @@ class LogicRelay : public omnetpp::cSimpleModule
     int cadToRxSymbols = 8;
     int relayClockAccuracyPpm = 40;
     int relaySpreadingFactor = 9;
-    int relayUplinkChannel = 3;
+    int relayUplinkChannel = 1;
     int rxrChannel = 1;
     int maximumForwardedPayload = 222;
     bool forwardingEnabled = true;
@@ -87,6 +90,8 @@ class LogicRelay : public omnetpp::cSimpleModule
     long forwardingLimitDrops = 0;
     long payloadLimitDrops = 0;
     long joinFilterDrops = 0;
+    long staleContextDrops = 0;
+    long whitelistDrops = 0;
 };
 
 } // namespace opp_lora_relay_official

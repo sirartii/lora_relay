@@ -5,6 +5,7 @@
 
 #include <list>
 #include <string>
+#include <map>
 
 #include "Keeper.h"
 #include "LoRaPacket.h"
@@ -38,13 +39,20 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     void updateRadio();
     void sendToNetwork(LoRaPacket *msg);
     void directSendWithDelete(LoRaPacket *msg);
-    void receiveFromNetwork(LoRaPacket *msg);
+    void receiveFromNetwork(LoRaPacket *msg, bool fromCad = false);
+    bool isConfiguredWorChannel(int channel) const;
+    void scheduleWorAcquisition(LoRaPacket *packet, omnetpp::simtime_t earliest);
+    void handleWorAcquisition(omnetpp::cMessage *timer);
     void dropByCollision(LoRaPacket *packet);
     void updateRadioActivity(RadioActivity::ra activity);
     void updateDaytime();
     void openClassAWindow(int index, omnetpp::cMessage *timer);
-    void scheduleClassAReception(bool includeRxr);
-    bool relayScanOverlaps(const LoRaPacket *packet, omnetpp::simtime_t *scanTime = nullptr) const;
+    void scheduleClassAReception(bool includeRxr, bool join, int deviceId, int packetId, int attemptId, int channel);
+    void finishClassAReception();
+    void scheduleNextClassAWindow(int index);
+    bool classAResponseMatches(const LoRaPacket *packet) const;
+    bool relayScanOverlaps(const LoRaPacket *packet, omnetpp::simtime_t *scanTime = nullptr,
+                           omnetpp::simtime_t earliest = omnetpp::SimTime(0)) const;
     double getRssi(LoRaPacket *msg);
     double calculateReceivedPower(float pSend, double distance);
 
@@ -70,6 +78,26 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     bool disableClassAWindows = false;
     bool rxrPending = false;
     bool downlinkReceivedInClassA = false;
+    bool classAInProgress = false;
+    bool classAJoin = false;
+    int classAWindowOpen = 0;
+    int classAPacketId = -1;
+    int classADeviceId = -1;
+    int classAAttemptId = -1;
+    int classARx1Channel = 1;
+    omnetpp::simtime_t classATxEnd;
+    double receiveDelay1 = 1;
+    double joinAcceptDelay1 = 5;
+    double ts011RxrDelay = 18;
+    double epRxrDelay = 7;
+    long lateDownlinkDrops = 0;
+    struct AccessGrant {
+        int packetId;
+        int attemptId;
+        int channel;
+        omnetpp::simtime_t until;
+    };
+    std::map<int, AccessGrant> accessGrants;
 
     int listeningWindowStart1 = 0;
     int listeningWindowStart2 = 0;
@@ -81,8 +109,8 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     double listeningWindowRXC = 1;
     double listeningWindowRXCR = 3;
 
-    int ts011DefaultWorChannel = 1;
-    int ts011SecondWorChannel = 2;
+    int ts011DefaultWorChannel = 10;
+    int ts011SecondWorChannel = 11;
     bool ts011SecondChannelEnabled = false;
     int ts011Rx2Channel = 1;
     int ts011RxrChannel = 1;
@@ -101,12 +129,22 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     omnetpp::cMessage *timerListeningWindowStop1 = nullptr;
     omnetpp::cMessage *timerListeningWindowStart2 = nullptr;
     omnetpp::cMessage *timerListeningWindowStop2 = nullptr;
+    std::map<omnetpp::cMessage *, LoRaPacket *> pendingWorAcquisitions;
+    long cadBusySkips = 0;
+    long cadAcquisitionsDefault = 0;
+    long cadAcquisitionsSecond = 0;
     std::list<LoRaPacket> sendQueue;
 
     double currentConsumptionRx = 0;
     double currentConsumptionTx = 0;
     double currentConsumptionIdle = 0;
     double currentConsumptionWOR = 0;
+    double cadDurationSeconds = 0;
+    double cadDutyFraction = 0;
+    double worStateSeconds = 0;
+    bool activeTxIsWor = false;
+    double actualWorTxSeconds = 0;
+    double actualWorTxChargeMAs = 0;
     double currentConsumptionBaseOffset = 0;
     double lteAttachEnergyMAs = 0;
     double lteTransmitEnergyMAs = 0;

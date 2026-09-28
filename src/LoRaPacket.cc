@@ -162,19 +162,27 @@ int LoRaPacket::autodetectUplink()
     return isUplink;
 }
 
+int LoRaPacket::phyPayloadLength() const
+{
+    // Control-frame lengths already describe their complete on-air payload.
+    if (isWOR() || isWorAck() || getKind() == MsgType::JOINREQUEST ||
+        getKind() == MsgType::JOINACCEPT || getKind() == MsgType::ACK)
+        return length;
+    return length + LORAWAN_FRAME_OVERHEAD;
+}
+
 float LoRaPacket::calcMsgDuration() const
 {
     const int sf = spreadingFactor;
     const double lowDataRateOptimization = (sf == 11 || sf == 12) ? 1.0 : 0.0;
     const int bandwidthKhz = 125;
-    const int loraHeaderSize = 13;
     const int preamble = calcMsgPreamble();
     const double explicitHeader = 1;
     const int codingRate = 5;
     const double symbolMs = std::pow(2.0, sf) / (bandwidthKhz * 1000.0) * 1000.0;
     const double preambleMs = (preamble + 4.25) * symbolMs;
     const double encoded = std::ceil(
-        (8 * (length + loraHeaderSize) - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) /
+        (8 * phyPayloadLength() - 4 * sf + 28 + 16 - 20 * (1 - explicitHeader)) /
         (4 * (sf - 2 * lowDataRateOptimization))) * codingRate;
     const double payloadSymbols = 8 + std::max(encoded, 0.0);
     return static_cast<float>((preambleMs + payloadSymbols * symbolMs) / 1000.0);

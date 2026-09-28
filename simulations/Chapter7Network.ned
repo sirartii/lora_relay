@@ -13,8 +13,8 @@ network Chapter7Network
 {
     parameters:
         int numEndnodes = default(50);
-        int extranodex1 = int((numEndnodes * 3) / 50);
-        int extranodex2 = int((numEndnodes * 2) / 50);
+        int extranodex1 = default(int((numEndnodes * 3) / 50));
+        int extranodex2 = default(int((numEndnodes * 2) / 50));
         int numGateways = default(1);
         int numRelays = default(0);
         int numIpBridges = default(0);
@@ -27,7 +27,27 @@ network Chapter7Network
         double gw2y = default(250);
         double gw3x = default(250);
         double gw3y = default(750);
+        // Keep the terminal distribution independent from gateway placement.
+        // Defaults reproduce chapter 7 exactly, while review experiments can
+        // move gateways without moving the population at the same time.
+        double centralX = default(750);
+        double centralY = default(450);
         double R = default(350);
+        double centralMinRadius = default(0);
+
+        double weak1x = default(108);
+        double weak1y = default(250);
+        double weak1Width = default(300);
+        double weak1Height = default(300);
+        double weak2x = default(50);
+        double weak2y = default(550);
+        double weak2Width = default(300);
+        double weak2Height = default(300);
+
+        double relay1x = default(300);
+        double relay1y = default(250);
+        double relay2x = default(300);
+        double relay2y = default(650);
 
         int framesPerWindowMin = default(1);
         int framesPerWindowMax = default(1);
@@ -43,22 +63,24 @@ network Chapter7Network
 
         endnode[numEndnodes]: Endnode {
             parameters:
-                xpos = parent.gw1x + parent.R * sqrt(uniform(0,1)) * cos(uniform(0, 2*3.14159));
-                ypos = parent.gw1y + parent.R * sqrt(uniform(0,1)) * sin(uniform(0, 2*3.14159));
+                xpos = parent.centralX + sqrt(uniform(parent.centralMinRadius * parent.centralMinRadius,
+                                                       parent.R * parent.R)) * cos(uniform(0, 2*3.14159));
+                ypos = parent.centralY + sqrt(uniform(parent.centralMinRadius * parent.centralMinRadius,
+                                                       parent.R * parent.R)) * sin(uniform(0, 2*3.14159));
             @display("p=$xpos,$ypos;r=1,#FF80FF,#0080FF,2");
         }
 
         endnode1[extranodex1]: Endnode {
             parameters:
-                xpos = 108 + uniform(1,300);
-                ypos = 250 + uniform(1,300);
+                xpos = parent.weak1x + uniform(1,parent.weak1Width);
+                ypos = parent.weak1y + uniform(1,parent.weak1Height);
             @display("p=$xpos,$ypos;r=1,#0080C0,#FF0080,2");
         }
 
         endnode2[extranodex2]: Endnode {
             parameters:
-                xpos = 50 + uniform(1,300);
-                ypos = parent.playgroundHeight - 50 - uniform(1,300);
+                xpos = parent.weak2x + uniform(1,parent.weak2Width);
+                ypos = parent.weak2y + uniform(1,parent.weak2Height);
             @display("p=$xpos,$ypos;r=1,#0080C0,#FF0080,2");
         }
 
@@ -71,8 +93,8 @@ network Chapter7Network
 
         relay[numRelays]: Relay {
             parameters:
-                xpos = 300;
-                ypos = index == 0 ? 250 : 650;
+                xpos = index == 0 ? parent.relay1x : parent.relay2x;
+                ypos = index == 0 ? parent.relay1y : parent.relay2y;
             @display("p=$xpos,$ypos;r=1,#00A000,black,2");
         }
 

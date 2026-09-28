@@ -19,6 +19,9 @@ package opp_lora_relay_official;
 simple Keeper
 {
     parameters:
+        bool exportFrameRecords = default(false);
+        bool epDesignationRestricted = default(false); // experimental: only endnode1/endnode2
+        bool ts011WhitelistRestricted = default(false); // experimental: only endnode1/endnode2
     	@display("i=block/broadcast");
     	
 		int numEndnodes;

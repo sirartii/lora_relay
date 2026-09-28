@@ -38,6 +38,7 @@ public:
     bool isWorAck() const;
     int autodetectUplink();
     float calcMsgDuration() const;
+    int phyPayloadLength() const;
     double symbolTime() const;
     std::string GetPacketName() const;
 

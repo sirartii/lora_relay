@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "LoRaPacket.h"
+#include "WindowSchedule.h"
 
 namespace opp_lora_relay_official {
 
@@ -20,6 +21,8 @@ LogicEndnode::~LogicEndnode()
             cancelAndDelete(timer);
     if (responseTimer != nullptr)
         cancelAndDelete(responseTimer);
+    if (nextTransactionTimer != nullptr)
+        cancelAndDelete(nextTransactionTimer);
 }
 
 void LogicEndnode::initialize()
@@ -32,6 +35,9 @@ void LogicEndnode::initialize()
     framesPerWindowMin = std::max(1, static_cast<int>(par("framesPerWindowMin").intValue()));
     framesPerWindowMax = std::max(framesPerWindowMin, static_cast<int>(par("framesPerWindowMax").intValue()));
     applicationPayloadLength = par("applicationPayloadLength").intValue();
+    ackEvery = std::max(1, static_cast<int>(par("ackEvery").intValue()));
+    ts011MissedAcksToRelay = std::max(1, static_cast<int>(par("ts011MissedAcksToRelay").intValue()));
+    ts011JoinRelayEvery = std::max(1, static_cast<int>(par("ts011JoinRelayEvery").intValue()));
     missedPacketsToSearchRelay = std::max(1, static_cast<int>(par("missedPacketsToSearchRelay").intValue()));
     forceSpreadingFactor = par("forceSF").intValue();
     model = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
@@ -62,7 +68,6 @@ void LogicEndnode::initialize()
     updateLogicalState(EndDeviceState::OFFLINE);
 
     for (int i = 0; i < windowsPerDay; ++i) {
-        framesRemaining[i] = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
         windowTimers[i] = new cMessage(i == 0 ? "applicationWindow1" : "applicationWindow2",
                                        i == 0 ? SelfMsgType::TXWINDOW1 : SelfMsgType::TXWINDOW2);
         scheduleInitialWindow(windowTimers[i], i);
@@ -81,30 +86,34 @@ void LogicEndnode::scheduleInitialWindow(cMessage *timer, int windowIndex)
     const long long dayStartMs = (nowMs / DAY_MS) * DAY_MS;
     long long startMs = dayStartMs + transmittingWindowStart[windowIndex] * 60000LL;
     const long long durationMs = std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
-    if (startMs + durationMs <= nowMs)
+    if (startMs + durationMs <= nowMs + 1)
         startMs += DAY_MS;
+    windowStartMs[windowIndex] = startMs;
     const long long earliest = std::max(nowMs + 1, startMs);
-    const long long latest = startMs + durationMs;
-    const long long offset = latest > earliest ? intrand(static_cast<int>(latest - earliest)) : 0;
-    scheduleAt(SimTime(earliest + offset, SIMTIME_MS), timer);
+    planWindow(timer, windowIndex, earliest, startMs + durationMs);
+}
+
+void LogicEndnode::planWindow(cMessage *timer, int windowIndex, long long firstMs, long long endMs)
+{
+    const int count = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
+    windowDeadlinesMs[windowIndex] = sampleWindowSchedule(firstMs, endMs, count,
+        [this](int width) { return intrand(width); });
+    nextWindowDeadline[windowIndex] = 0;
+    scheduleAt(SimTime(windowDeadlinesMs[windowIndex].front(), SIMTIME_MS), timer);
 }
 
 void LogicEndnode::scheduleFollowingWindow(cMessage *timer, int windowIndex)
 {
-    const long long nowMs = simTime().inUnit(SIMTIME_MS);
-    const long long dayStartMs = (nowMs / DAY_MS) * DAY_MS;
-    const long long startMs = dayStartMs + transmittingWindowStart[windowIndex] * 60000LL;
-    const long long endMs = startMs + std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
-    --framesRemaining[windowIndex];
-    if (framesRemaining[windowIndex] > 0 && nowMs + 1 < endMs) {
-        const long long remaining = endMs - nowMs - 1;
-        scheduleAt(SimTime(nowMs + 1 + intrand(static_cast<int>(remaining)), SIMTIME_MS), timer);
+    auto& next = nextWindowDeadline[windowIndex];
+    const auto& deadlines = windowDeadlinesMs[windowIndex];
+    if (++next < deadlines.size()) {
+        scheduleAt(SimTime(deadlines[next], SIMTIME_MS), timer);
         return;
     }
-    framesRemaining[windowIndex] = intrand(framesPerWindowMax - framesPerWindowMin + 1) + framesPerWindowMin;
-    const long long nextStart = startMs + DAY_MS;
+    windowStartMs[windowIndex] += DAY_MS;
+    const long long nextStart = windowStartMs[windowIndex];
     const long long duration = std::max(1LL, transmittingWindowDuration[windowIndex] * 60000LL);
-    scheduleAt(SimTime(nextStart + intrand(static_cast<int>(duration)), SIMTIME_MS), timer);
+    planWindow(timer, windowIndex, nextStart, nextStart + duration);
 }
 
 void LogicEndnode::handleMessage(cMessage *msg)
@@ -125,9 +134,17 @@ void LogicEndnode::handleMessage(cMessage *msg)
                 const int packetId = msg->par("packetId").longValue();
                 const bool join = msg->par("join").boolValue();
                 const bool ack = msg->par("ackRequired").boolValue();
-                const bool relayed = msg->par("relayed").boolValue();
-                if (model == RetransmissionModel::TS011 && relayed)
+                bool relayed = msg->par("relayed").boolValue();
+                if (!transactionActive || packetId != activePacketId) {
+                    delete msg;
+                    return;
+                }
+                if (model == RetransmissionModel::TS011 && relayed && !join)
                     updateTs011MissedAck(pendingWorCounter);
+                if (model == RetransmissionModel::TS011 && !join &&
+                    (relayForwardingDisabled || simTime() < relayHoldoffUntil))
+                    relayed = false; // Forward says RL cannot help; keep the direct opportunity.
+                activeRelayed = relayed;
                 sendDataFrame(packetId, join, ack, relayed);
                 delete msg;
                 return;
@@ -135,12 +152,25 @@ void LogicEndnode::handleMessage(cMessage *msg)
             case SelfMsgType::RESPONSE_TIMEOUT:
                 handleResponseTimeout(msg);
                 return;
+            case SelfMsgType::MAC_START_NEXT:
+                nextTransactionTimer = nullptr;
+                delete msg;
+                if (transactionActive)
+                    startActiveAttempt();
+                else
+                    startNextTransmission();
+                return;
             default:
                 delete msg;
                 return;
         }
     }
 
+    if (msg->getKind() == MsgType::MAC_TX_COMPLETE) {
+        startResponseTimeout(msg);
+        delete msg;
+        return;
+    }
     auto *packet = dynamic_cast<LoRaPacket *>(msg);
     if (packet == nullptr) {
         delete msg;
@@ -154,18 +184,46 @@ void LogicEndnode::handleMessage(cMessage *msg)
 
 void LogicEndnode::beginApplicationTransmission()
 {
-    const int packetId = packetCounter++;
-    const bool ackRequired = packetId % 5 == 0 || lastAckRequestCount > 0;
-    const bool join = endDeviceState == EndDeviceState::OFFLINE ||
-                      endDeviceState == EndDeviceState::JOIN_DIRECT ||
-                      endDeviceState == EndDeviceState::JOIN_RELAY;
-    const bool relayed = endDeviceState == EndDeviceState::JOIN_RELAY ||
-                         endDeviceState == EndDeviceState::ONLINE_RELAYED;
+    pendingApplicationTimes.push_back(simTime());
+    if (!transactionActive && nextTransactionTimer == nullptr)
+        startNextTransmission();
+}
+
+void LogicEndnode::startNextTransmission()
+{
+    if (transactionActive || pendingApplicationTimes.empty())
+        return;
+    activeApplicationTime = pendingApplicationTimes.front();
+    pendingApplicationTimes.pop_front();
+    totalMacQueueDelay += (simTime() - activeApplicationTime).dbl();
+    transactionActive = true;
+    activePacketId = packetCounter++;
+    activeAttempt = 0;
+    activeFallbackUsed = false;
+    activeJoin = !sessionJoined;
+    activeAckRequired = activeJoin || (++dataCounter % ackEvery == 0);
+    if (activeJoin) {
+        ++joinAttemptCounter;
+        if (model == RetransmissionModel::TS011)
+            relayMode = keeper->hasRelayPath() && joinAttemptCounter % ts011JoinRelayEvery == 0;
+    }
+    activeRelayed = relayMode && keeper->hasRelayPath();
+    if (!activeJoin && model == RetransmissionModel::TS011 &&
+        (relayForwardingDisabled || simTime() < relayHoldoffUntil))
+        activeRelayed = false;
+    updateSessionState();
+    startActiveAttempt();
+}
+
+void LogicEndnode::startActiveAttempt()
+{
+    const int packetId = activePacketId;
+    const bool join = activeJoin;
+    const bool ackRequired = activeAckRequired;
+    const bool relayed = activeRelayed;
 
     if (!relayed) {
-        if (join)
-            updateLogicalState(EndDeviceState::JOIN_DIRECT);
-        sendDataFrame(packetId, join, true, false);
+        sendDataFrame(packetId, join, ackRequired, false);
         return;
     }
 
@@ -183,6 +241,28 @@ void LogicEndnode::beginApplicationTransmission()
     event->addPar("ackRequired") = ackRequired;
     event->addPar("relayed") = true;
     scheduleAt(simTime() + driftWindow, event);
+}
+
+void LogicEndnode::updateSessionState()
+{
+    const auto desired = sessionJoined ? (relayMode ? EndDeviceState::ONLINE_RELAYED : EndDeviceState::ONLINE_DIRECT)
+                                      : (relayMode ? EndDeviceState::JOIN_RELAY : EndDeviceState::JOIN_DIRECT);
+    if (endDeviceState != desired) updateLogicalState(desired);
+}
+
+void LogicEndnode::completeTransaction()
+{
+    transactionActive = false;
+    waitingResponse = false;
+    activePacketId = -1;
+    if (responseTimer != nullptr) {
+        cancelAndDelete(responseTimer);
+        responseTimer = nullptr;
+    }
+    if (!pendingApplicationTimes.empty() && nextTransactionTimer == nullptr) {
+        nextTransactionTimer = new cMessage("next MAC transaction", SelfMsgType::MAC_START_NEXT);
+        scheduleAt(simTime(), nextTransactionTimer);
+    }
 }
 
 int LogicEndnode::chooseWorChannel() const
@@ -230,11 +310,15 @@ simtime_t LogicEndnode::synchronizedWorStart(int spreadingFactor, int channel, i
 
 void LogicEndnode::scheduleTs011Wor(int packetId, bool join, bool ackRequired)
 {
-    const int channel = chooseWorChannel();
+    int channel = chooseWorChannel();
     int preamble = unsynchronizedPreambleSymbols(ts011EndDeviceSpreadingFactor);
     simtime_t start = simTime();
     if (syncState == Ts011SyncState::SYNCHRONIZED)
         start = synchronizedWorStart(ts011EndDeviceSpreadingFactor, channel, preamble);
+    // Drift may have invalidated synchronization in synchronizedWorStart().
+    // The first unsynchronized WOR already belongs on the default channel.
+    if (syncState != Ts011SyncState::SYNCHRONIZED)
+        channel = ts011DefaultWorChannel;
 
     auto *event = new cMessage("TS011 WOR transmission", SelfMsgType::TS011_SEND_WOR);
     event->addPar("packetId") = packetId;
@@ -270,6 +354,7 @@ void LogicEndnode::sendTs011Wor(cMessage *event)
         ++invalidWorTransmitted;
     wor->addPar("KeeperIndex") = myKeeperIndex;
     wor->addPar("PacketId") = packetId;
+    wor->addPar("AttemptId") = activeAttempt;
     pendingWorCounter = wor->worFrameCounter;
     pendingWorAcknowledged = false;
     lastWorPreambleSymbols = wor->preambleSymbols;
@@ -326,53 +411,110 @@ void LogicEndnode::sendDataFrame(int packetId, bool join, bool ackRequired, bool
     packet->relayRequired = relayed;
     packet->ackRequired = join || ackRequired;
     packet->rxrEligible = relayed;
-    packet->length = join ? (relayed ? RELAY_JOIN_LENGTH : 15) : applicationPayloadLength;
+    packet->length = join ? 23 : applicationPayloadLength;
     packet->spreadingFactor = relayed ? ts011EndDeviceSpreadingFactor : forceSpreadingFactor;
     packet->channel = relayed ? ts011UplinkChannel : 1;
     packet->joinEui = 0x0102030405060708ULL;
     packet->devEui = static_cast<unsigned int>(myKeeperIndex);
     packet->addPar("KeeperIndex") = myKeeperIndex;
     packet->addPar("PacketId") = packetId;
+    packet->addPar("AttemptId") = activeAttempt;
+    packet->addPar("ApplicationTime") = activeApplicationTime.dbl();
     const bool expectResponse = packet->ackRequired;
     send(packet, "logicOut");
     keeper->recordMessageTransmission(myKeeperIndex, packetId, true);
+    keeper->recordFrameDetails(myKeeperIndex, packetId, join, ackRequired, relayed, activeApplicationTime);
     waitingResponse = expectResponse;
-    if (waitingResponse) {
-        ++lastAckRequestCount;
-        startResponseTimeout();
-    }
+    if (join) ++joinTransmitted;
+    else if (ackRequired) ++confirmedDataTransmitted;
 }
 
-void LogicEndnode::startResponseTimeout()
+void LogicEndnode::startResponseTimeout(cMessage *txComplete)
 {
+    if (!transactionActive || txComplete->par("PacketId").longValue() != activePacketId ||
+        txComplete->par("AttemptId").longValue() != activeAttempt)
+        return;
     if (responseTimer != nullptr) {
         if (responseTimer->isScheduled())
             cancelEvent(responseTimer);
         delete responseTimer;
     }
     responseTimer = new cMessage("response timeout", SelfMsgType::RESPONSE_TIMEOUT);
-    scheduleAt(simTime() + REPLAY_TIMEOUT, responseTimer);
+    responseTimer->addPar("PacketId") = activePacketId;
+    responseTimer->addPar("AttemptId") = activeAttempt;
+    const double lastDelay = activeRelayed ?
+        par(model == RetransmissionModel::TS011 ? "ts011RxrDelay" : "epRxrDelay").doubleValue() :
+        par(activeJoin ? "joinAcceptDelay1" : "receiveDelay1").doubleValue() + 1.0;
+    LoRaPacket reply("reply timing", activeJoin ? MsgType::JOINACCEPT : MsgType::ACK);
+    reply.length = activeJoin ? 17 : 12;
+    reply.spreadingFactor = txComplete->par("sf").longValue();
+    // Reception begun at the end of a window is allowed to finish.
+    scheduleAt(simTime() + lastDelay + par("receiveWindowDuration").doubleValue() +
+               reply.calcMsgDuration() + SimTime(1, SIMTIME_MS), responseTimer);
 }
 
 void LogicEndnode::handleResponseTimeout(cMessage *msg)
 {
     responseTimer = nullptr;
+    if (!transactionActive || msg->par("PacketId").longValue() != activePacketId ||
+        msg->par("AttemptId").longValue() != activeAttempt) {
+        delete msg;
+        return;
+    }
     if (waitingResponse) {
         waitingResponse = false;
         ++missedResponse;
-        if (missedResponse >= missedPacketsToSearchRelay) {
+        const int threshold = model == RetransmissionModel::TS011 ? ts011MissedAcksToRelay : missedPacketsToSearchRelay;
+        const bool restrictedOut = model == RetransmissionModel::EP431 &&
+                                   !keeper->epRelayEligible(myKeeperIndex);
+        if (restrictedOut && activeJoin && activeRelayed) {
+            // One unanswered Relay Join is enough to leave relay acquisition.
+            // Next scheduled opportunity sends an ordinary direct Join.
+            sessionJoined = false;
+            relayMode = false;
             missedResponse = 0;
-            lastAckRequestCount = 0;
-            updateLogicalState(keeper->hasRelayPath() ? EndDeviceState::JOIN_RELAY : EndDeviceState::OFFLINE);
+            keeper->recordEpRecovery(myKeeperIndex, activePacketId, 2);
+            updateSessionState();
+        }
+        else if (!activeJoin && missedResponse >= threshold && keeper->hasRelayPath()) {
+            if (restrictedOut) {
+                // The ED does not obtain a designation. It first requests one
+                // using Relay Join, rather than sending unaccepted relay data.
+                sessionJoined = false;
+                keeper->recordEpRecovery(myKeeperIndex, activePacketId, 1);
+            }
+            relayMode = true;
+            missedResponse = 0;
+            updateSessionState();
+            if (model == RetransmissionModel::TS011 && !activeRelayed && !activeFallbackUsed &&
+                !relayForwardingDisabled && simTime() >= relayHoldoffUntil) {
+                activeFallbackUsed = true;
+                activeRelayed = true;
+                ++activeAttempt;
+                ++relayFallbacks;
+                nextTransactionTimer = new cMessage("TS011 confirmed fallback", SelfMsgType::MAC_START_NEXT);
+                scheduleAt(simTime() + uniform(1.0, 3.0), nextTransactionTimer);
+                delete msg;
+                return;
+            }
+        }
+        else if (activeJoin && model != RetransmissionModel::TS011 &&
+                 missedResponse >= missedPacketsToSearchRelay) {
+            relayMode = keeper->hasRelayPath();
+            missedResponse = 0;
+            updateSessionState();
         }
         send(new cMessage("ResetADR", MsgType::RESET_ADR), "logicOut");
     }
     delete msg;
+    completeTransaction();
 }
 
 void LogicEndnode::handleWorAck(LoRaPacket *packet)
 {
-    if (packet->worFrameCounter == pendingWorCounter) {
+    if (transactionActive && !activeJoin && packet->worFrameCounter == pendingWorCounter &&
+        packet->hasPar("PacketId") && packet->par("PacketId").longValue() == activePacketId &&
+        packet->par("AttemptId").longValue() == activeAttempt) {
         pendingWorAcknowledged = true;
         lastAcknowledgedWorCounter = packet->worFrameCounter;
         consecutiveWorWithoutAck = 0;
@@ -382,19 +524,43 @@ void LogicEndnode::handleWorAck(LoRaPacket *packet)
         tRef = tLast + lastWorPreambleSymbols * packet->symbolTime() - packet->tOffsetMs / 1000.0;
         syncState = Ts011SyncState::SYNCHRONIZED;
         ++worAckReceived;
+        if (packet->forwardStatus != 0) {
+            ++forwardingHoldoffs;
+            if (packet->forwardStatus == 3)
+                relayForwardingDisabled = true; // No runtime reconfiguration in this subset.
+            else
+                relayHoldoffUntil = std::max(relayHoldoffUntil, simTime() +
+                    (packet->forwardStatus == 1 ? 1800 : 3600));
+        }
     }
+    else ++ignoredResponses;
     delete packet;
 }
 
 void LogicEndnode::handleDownlink(LoRaPacket *packet)
 {
+    const bool matches = transactionActive && packet->hasPar("PacketId") && packet->hasPar("AttemptId") &&
+        packet->par("PacketId").longValue() == activePacketId &&
+        packet->par("AttemptId").longValue() == activeAttempt;
+    const bool expectedKind = activeJoin ? packet->getKind() == MsgType::JOINACCEPT :
+        (packet->getKind() == MsgType::ACK || (!activeAckRequired && packet->getKind() == MsgType::DOWNLINK));
+    if (!matches || !expectedKind) {
+        ++ignoredResponses;
+        delete packet;
+        return;
+    }
     if (packet->hasPar("KeeperIndex") && packet->hasPar("PacketId"))
         keeper->recordDownlinkReception(packet->par("KeeperIndex").longValue(),
                                         packet->par("PacketId").longValue());
     missedResponse = 0;
     waitingResponse = false;
-    lastAckRequestCount = 0;
     lastAckTime = simTime();
+    if (forceSpreadingFactor == -1) {
+        if (packet->hasPar("ADR-"))
+            send(new cMessage("ADR decrease SF", MsgType::ADR_DECREASE_SF), "logicOut");
+        else if (packet->hasPar("ADR+"))
+            send(new cMessage("ADR increase SF", MsgType::ADR_INCREASE_SF), "logicOut");
+    }
     if (responseTimer != nullptr) {
         if (responseTimer->isScheduled())
             cancelEvent(responseTimer);
@@ -402,31 +568,34 @@ void LogicEndnode::handleDownlink(LoRaPacket *packet)
         responseTimer = nullptr;
     }
     if (packet->getKind() == MsgType::JOINACCEPT) {
-        if (endDeviceState == EndDeviceState::JOIN_RELAY) {
-            updateLogicalState(EndDeviceState::ONLINE_RELAYED);
+        sessionJoined = true;
+        relayMode = packet->hasPar("ReceiveWindow") && packet->par("ReceiveWindow").longValue() == 3;
+        if (relayMode) {
             if (syncState == Ts011SyncState::INITIALIZED)
                 syncState = Ts011SyncState::UNSYNCHRONIZED;
+            consecutiveWorWithoutAck = 0;
         }
-        else {
-            updateLogicalState(EndDeviceState::ONLINE_DIRECT);
-        }
-    }
-    else if (packet->getKind() == MsgType::TIMEOUT) {
-        updateLogicalState(EndDeviceState::OFFLINE);
+        updateSessionState();
     }
     delete packet;
+    completeTransaction();
 }
 
 void LogicEndnode::recordOnline()
 {
+    if (lastOnline < SIMTIME_ZERO) return;
     const double offlineTime = (simTime() - lastOnline).dbl();
     offlineMax = std::max(offlineMax, offlineTime);
     offlineTotal += offlineTime;
     keeper->recordOfflineTime(myKeeperIndex, offlineTime);
+    lastOnline = SimTime(-1);
 }
 
 void LogicEndnode::updateLogicalState(EndDeviceState state)
 {
+    const bool wasOnline = endDeviceState == EndDeviceState::ONLINE_DIRECT || endDeviceState == EndDeviceState::ONLINE_RELAYED;
+    const bool willBeOnline = state == EndDeviceState::ONLINE_DIRECT || state == EndDeviceState::ONLINE_RELAYED;
+    if (wasOnline && !willBeOnline) lastOnline = simTime();
     if (endDeviceState != state)
         keeper->updateEndnodeState(myKeeperIndex, state);
     endDeviceState = state;
@@ -455,6 +624,13 @@ void LogicEndnode::updateLogicalState(EndDeviceState state)
 
 void LogicEndnode::finish()
 {
+    recordScalar("MAC ignored unmatched responses", ignoredResponses);
+    recordScalar("MAC confirmed data attempts", confirmedDataTransmitted);
+    recordScalar("MAC Join attempts", joinTransmitted);
+    recordScalar("MAC direct-to-relay retries", relayFallbacks);
+    recordScalar("MAC forwarding holdoffs", forwardingHoldoffs);
+    recordScalar("MAC pending application opportunities", pendingApplicationTimes.size());
+    recordScalar("MAC total queue delay seconds", totalMacQueueDelay);
     recordOnline();
     recordScalar("TS011 WOR transmitted", worTransmitted);
     recordScalar("TS011 WOR ACK received", worAckReceived);

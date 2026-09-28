@@ -3,7 +3,6 @@
 
 namespace opp_lora_relay_official {
 
-constexpr int REPLAY_TIMEOUT = 15;
 constexpr int TS011_JOIN_WOR_LENGTH = 5;
 constexpr int TS011_UPLINK_WOR_LENGTH = 15;
 constexpr int TS011_WOR_ACK_LENGTH = 7;
@@ -30,7 +29,7 @@ struct SelfMsgType
         UNKNOWN, RADIOINIT, WINDOWTIMER, RXTIMER, TXTIMER, RXC, RX1, RX2, RXR,
         TXWINDOW1, TXWINDOW2, TXREPEAT, RELAY_FORWARD, RELAY_RX_TIMEOUT,
         WORACK_RX_OPEN, WORACK_RX_CLOSE, TS011_SEND_WOR, TS011_SEND_DATA,
-        RESPONSE_TIMEOUT
+        RESPONSE_TIMEOUT, MAC_START_NEXT, WOR_CAD_ACQUIRE
     };
 };
 
@@ -47,7 +46,11 @@ enum MsgType
     DOWNLINK,
     ACK,
     TIMEOUT,
-    RESET_ADR
+    RESET_ADR,
+    ADR_INCREASE_SF,
+    ADR_DECREASE_SF,
+    MAC_TX_COMPLETE,
+    RELAY_ACCESS_GRANT
 };
 
 struct Coords { double x, y; };

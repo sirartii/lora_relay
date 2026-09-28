@@ -22,6 +22,7 @@
 #include <vector>
 #include <limits>
 #include <string>
+#include <set>
 #include "LoRaPacket.h"
 
 using namespace omnetpp;
@@ -70,7 +71,8 @@ class LNS : public omnetpp::cSimpleModule
     static inline long long makeKey(long devIdx, long pktId) {
         return ( (static_cast<long long>(devIdx) << 32) ^ (static_cast<unsigned long long>(pktId) & 0xFFFFFFFFull) );
     }
-    std::unordered_map<long long, DedupEntry> dedup;
+    std::map<std::string, DedupEntry> dedup;
+    std::set<long long> deliveredApplicationFrames;
     std::vector<ReceivedFrame> receivedFrames;
     double relayForwardDelay = 1.0;
     omnetpp::cStdDev networkTimeCorrectionError;
@@ -82,7 +84,6 @@ class LNS : public omnetpp::cSimpleModule
     void onDedupTimer(omnetpp::cMessage* self);
     void processUniqueUplink(DedupEntry& e, int preferOutGate);
     void calcADR(LoRaPacket* packet, double rssiMargin);
-    double responseTime() const;
 
     // --- cSimpleModule ---
     virtual void initialize() override;

@@ -14,6 +14,7 @@
 // 
 
 #include "Keeper.h"
+#include "Radio.h"
 #include <fstream>
 #include <ctime>
 #include <chrono>
@@ -52,7 +53,7 @@ void Keeper::recordDownlinkReception(long devIdx, long pktId)
     const uint64_t key = makeKey(devIdx, pktId);
     if (dlDelivered_.insert(key).second) {
         auto it = ulDeliveredDay_.find(key);
-        if (it != ulDeliveredDay_.end()) {
+        if (it != ulDeliveredDay_.end() && dataUlTransmitted_.count(key)) {
             // Dzień liczymy wg UL
             dailyReadDeviceDayE2E_.insert(makeDevDayKey(devIdx, it->second));
         }
@@ -143,6 +144,30 @@ bool Keeper::hasRelayPath() const
 bool Keeper::isCollectingStatistics() const
 {
     return simTime() >= getSimulation()->getWarmupPeriod();
+}
+
+bool Keeper::epRelayEligible(int device) const
+{
+    if (!par("epDesignationRestricted").boolValue()) return true;
+    const auto &node = radioDevices.at(device);
+    if (node.devType != DevType::ENDNODE || node.radio == nullptr) return false;
+    const std::string name = node.radio->getParentModule()->getName();
+    return name == "endnode1" || name == "endnode2";
+}
+
+bool Keeper::ts011RelayEligible(int device) const
+{
+    if (!par("ts011WhitelistRestricted").boolValue()) return true;
+    const auto &node = radioDevices.at(device);
+    if (node.devType != DevType::ENDNODE || node.radio == nullptr) return false;
+    const std::string name = node.radio->getParentModule()->getName();
+    return name == "endnode1" || name == "endnode2";
+}
+
+void Keeper::recordEpRecovery(int device, int packet, int event)
+{
+    if (par("exportFrameRecords").boolValue())
+        epRecoveryEvents_.push_back({device, packet, event, simTime().dbl()});
 }
 
 int Keeper::firstStatisticsDay() const
@@ -322,6 +347,7 @@ void Keeper::recordMessageTransmission(int NodeFrom, int PacketId, bool isUplink
     if (isUplink) {
         const uint64_t key = makeKey(NodeFrom, PacketId);
         if (ulTransmitted_.insert(key).second) {
+            ulFirstTransmissionTime_[key] = simTime();
             totalPacketsTransmittedUL++;
             totalPacketsTransmitted++;
         }
@@ -330,6 +356,29 @@ void Keeper::recordMessageTransmission(int NodeFrom, int PacketId, bool isUplink
         totalPacketsTransmittedDL++;
         totalPacketsTransmitted++;
     }
+}
+
+void Keeper::recordFrameDetails(int device, int packet, bool join, bool ack, bool relayed, simtime_t applicationTime)
+{
+    if (!isCollectingStatistics()) return;
+    if (!join) dataUlTransmitted_.insert(makeKey(device, packet));
+    if (!par("exportFrameRecords").boolValue()) return;
+    auto &item = frameDetails_[makeKey(device, packet)];
+    item.join = join;
+    item.ack = ack;
+    item.applicationTime = applicationTime;
+    ++item.attempts;
+    if (relayed) ++item.relayAttempts;
+}
+
+void Keeper::recordActualRelayUplink(int device, int packet, int relay)
+{
+    if (!isCollectingStatistics() || !par("exportFrameRecords").boolValue()) return;
+    auto it = frameDetails_.find(makeKey(device, packet));
+    if (it == frameDetails_.end()) throw cRuntimeError("Relay TX without ED frame record");
+    ++it->second.actualRelayTx;
+    it->second.actualRelayIndex = radioDevices.at(relay).index;
+    actualRelayEvents_.push_back({device, packet, radioDevices.at(relay).index, simTime().dbl()});
 }
 
 void Keeper::recordMessageReception(long devIdx, long pktId)
@@ -341,21 +390,21 @@ void Keeper::recordMessageReception(long devIdx, long pktId)
 
     if (ulDelivered_.insert(key).second)
     {
+        auto detail = frameDetails_.find(key);
+        if (detail != frameDetails_.end()) detail->second.receptionTime = simTime();
+        const auto firstTx = ulFirstTransmissionTime_.find(key);
+        if (firstTx != ulFirstTransmissionTime_.end())
+            totalPacketTime += std::max(0.0, (simTime() - firstTx->second).dbl());
         const int d = dayIndex(simTime());
         ulDeliveredDay_[key] = d;
 
-        // --- NOWE: zalicz sukces dnia na bazie UL ---
-        dailyReadDeviceDayUL_.insert(makeDevDayKey(devIdx, d));
-
-        // Jeśli DL dla tego pakietu już był -> zalicz też E2E
-        if (dlDelivered_.find(key) != dlDelivered_.end())
-            dailyReadDeviceDayE2E_.insert(makeDevDayKey(devIdx, d));
-    }
-    // if DL already delivered, mark device-day as successful
-    if (dlDelivered_.find(key) != dlDelivered_.end()) {
-        auto it = ulDeliveredDay_.find(key);
-        if (it != ulDeliveredDay_.end()) {
-            dailyDeviceDaySuccess_.insert(makeDevDayKey(devIdx, it->second));
+        // An application read requires DATA. Join only establishes a session.
+        // Uplink read success does not require a downlink acknowledgment.
+        if (dataUlTransmitted_.count(key)) {
+            dailyReadDeviceDayUL_.insert(makeDevDayKey(devIdx, d));
+            dailyDeviceDaySuccess_.insert(makeDevDayKey(devIdx, d));
+            if (dlDelivered_.count(key))
+                dailyReadDeviceDayE2E_.insert(makeDevDayKey(devIdx, d));
         }
     }
 }
@@ -543,7 +592,7 @@ void Keeper::recordResultsToFile()
 
         outFile << "Packets delivered UL ef = " << (totalPacketsTransmittedUL > 0 ? 100.0 * (double)deliveredUL / (double)totalPacketsTransmittedUL : 0.0) << "[%]\n";
         outFile << "Packets delivered DL ef = " << (totalPacketsTransmittedDL > 0 ? 100.0 * (double)deliveredDL / (double)totalPacketsTransmittedDL : 0.0) << "[%]\n";
-        outFile << "Average packet delivery time = " << (totalPacketsDelivered > 0 ? totalPacketTime / (double)totalPacketsDelivered : 0.0) << "\n";
+        outFile << "Average packet delivery time = " << (deliveredUL > 0 ? totalPacketTime / (double)deliveredUL : 0.0) << "\n";
         outFile <<  "\n";
 
         //outFile << "Total packets delivered = " << globalStats.noPacketsDelivered << "\n";
@@ -558,6 +607,11 @@ void Keeper::recordResultsToFile()
         outFile << "Days device-days successful (UL)[%] = " << successfulUL << "\n";
         outFile << "Daily read success (UL)[%] = " << dailyUL << "[%]\n";
         outFile << "Daily read success (UL/DL)[%] = " << dailyE2E << "[%]\n";
+        outFile << "Daily read definition = application DATA only; Join excluded; UL does not require ACK\n";
+        outFile << "Packets transmitted DATA UL = " << dataUlTransmitted_.size() << "\n";
+        long deliveredData = 0;
+        for (auto key : dataUlTransmitted_) deliveredData += ulDelivered_.count(key);
+        outFile << "Packets delivered DATA UL = " << deliveredData << "\n";
         outFile <<  "\n";
 
         outFile << "Collisions uplink = " << noCollisionsUL << "\n";
@@ -666,18 +720,62 @@ void Keeper::finish()
     // Also export scalars for plotting
     int endnodes = countEndnodes();
     int simDays  = std::max(1, (int)std::ceil(simTime().dbl() / SECONDS_PER_DAY));
-    long long totalDeviceDays      = 1LL * endnodes * simDays;
+    long long totalDeviceDays      = 1LL * endnodes * std::max(0, simDays - firstStatisticsDay());
     long long successfulDeviceDays = (long long)dailyDeviceDaySuccess_.size();
     double dailyReadSuccess = (totalDeviceDays > 0)
                               ? (100.0 * (double)successfulDeviceDays / (double)totalDeviceDays)
                               : 0.0;
 
     recordScalar("Total utilisation", totalDuration / simTime());
-    recordScalar("Average packet time", (totalPacketsDelivered > 0 ? totalPacketTime / totalPacketsDelivered : 0.0));
+    recordScalar("Average packet time", (deliveredUL > 0 ? totalPacketTime / deliveredUL : 0.0));
     recordScalar("Total packets delivered", totalPacketsDelivered);
     recordScalar("Daily succes rate", dailyReadSuccess);
+    recordScalar("Daily read success DATA percent", dailyReadSuccess);
+    recordScalar("Successful DATA device-days", successfulDeviceDays);
 
     recordResultsToFile();
+    if (par("exportFrameRecords").boolValue()) {
+        std::ofstream frames("n07_frames.json", std::ios::trunc);
+        if (!frames) throw cRuntimeError("Cannot write per-frame records");
+        frames << "{\"schema\":3,\"columns\":[\"device\",\"packet_id\",\"group\",\"tx_seconds\",\"delivered\",\"rx_day_zero_based\",\"join\",\"ack_required\",\"application_seconds\",\"rx_seconds\",\"attempts\",\"relay_attempts\",\"actual_relay_tx\",\"actual_relay_index\"],\"frames\":[";
+        frames << std::setprecision(17);
+        bool first = true;
+        for (const auto &item : ulFirstTransmissionTime_) {
+            const size_t device = item.first >> 32;
+            const auto &detail = frameDetails_.at(item.first);
+            const std::string name = radioDevices.at(device).radio->getParentModule()->getName();
+            const int group = name == "endnode" ? 0 : (name == "endnode1" ? 1 : 2);
+            const bool delivered = ulDelivered_.count(item.first) != 0;
+            if (!first) frames << ",";
+            first = false;
+            frames << "[" << device << "," << static_cast<uint32_t>(item.first) << "," << group << ","
+                   << item.second.dbl() << "," << delivered << "," << (delivered ? ulDeliveredDay_.at(item.first) : -1)
+                   << "," << detail.join << "," << detail.ack << "," << detail.applicationTime.dbl()
+                   << "," << detail.receptionTime.dbl() << "," << detail.attempts << "," << detail.relayAttempts
+                   << "," << detail.actualRelayTx << "," << detail.actualRelayIndex << "]";
+        }
+        frames << "]}\n";
+        // Actual RF start times: attribute forwarding to the day it occurred,
+        // not to the possibly earlier application-generation day.
+        std::ofstream events("relay_events.json", std::ios::trunc);
+        if (!events) throw cRuntimeError("Cannot write relay diagnostics");
+        events << std::setprecision(17)
+               << "{\"schema\":1,\"relay_columns\":[\"device\",\"packet\",\"relay\",\"tx_seconds\"],\"relay_tx\":[";
+        first = true;
+        for (const auto &e : actualRelayEvents_) {
+            if (!first) events << ",";
+            first = false;
+            events << "[" << e.device << "," << e.packet << "," << e.code << "," << e.time << "]";
+        }
+        events << "],\"recovery_columns\":[\"device\",\"packet\",\"event\",\"seconds\"],\"recovery_event_codes\":{\"1\":\"lost_session_start_relay_join\",\"2\":\"failed_relay_join_return_direct\"},\"ep_recovery\":[";
+        first = true;
+        for (const auto &e : epRecoveryEvents_) {
+            if (!first) events << ",";
+            first = false;
+            events << "[" << e.device << "," << e.packet << "," << e.code << "," << e.time << "]";
+        }
+        events << "]}\n";
+    }
 }
 
 int Keeper::countEndnodes() const {
