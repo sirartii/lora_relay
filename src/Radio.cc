@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iomanip>
 
 namespace opp_lora_relay_official {
 
@@ -31,6 +32,10 @@ Radio::~Radio()
         dispose(pending.first);
         delete pending.second;
     }
+    for (auto &entry : gatewayTimers) {
+        dispose(entry.first);
+        delete entry.second.packet;
+    }
     delete currentRcvMessage;
 }
 
@@ -47,6 +52,14 @@ void Radio::initialize()
     position.y = host->par("ypos").doubleValue();
     sensitivity = par("sensitivityAllRadios").doubleValue();
     txPower = par("txPower").doubleValue();
+    lorawanMultichannel = par("lorawanMultichannel").boolValue();
+    if (lorawanMultichannel && deviceType == DevType::GATEWAY &&
+        par("exportGatewayReceives").boolValue()) {
+        gatewayTrace.open("gw_rx_" + std::to_string(myKeeperIndex) + ".csv");
+        if (!gatewayTrace) throw cRuntimeError("Cannot open gateway reception trace");
+        gatewayTrace << "start_s,end_s,device,packet,kind,channel,sf,rssi_dbm,outcome\n";
+        gatewayTrace << std::setprecision(12);
+    }
     retransmissionModel = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
 
     listeningWindowStart1 = par("listeningWindowStart1").intValue();
@@ -146,6 +159,10 @@ void Radio::handleMessage(cMessage *msg)
 {
     updateDaytime();
     if (msg->isSelfMessage()) {
+        if (gatewayTimers.count(msg)) {
+            completeGatewayReception(msg);
+            return;
+        }
         switch (msg->getKind()) {
             case SelfMsgType::RADIOINIT:
                 updateRadio();
@@ -440,6 +457,10 @@ bool Radio::acceptsAirDelivery(const LoRaPacket *packet) const
 {
     if (packet == nullptr)
         return false;
+    // Deliver starts even during TX, so missed preambles are counted and
+    // their on-air tails can interfere after TX ends. This does not receive them.
+    if (lorawanMultichannel && deviceType == DevType::GATEWAY)
+        return packet->isUplink && !packet->isWOR() && packet->channel >= 1 && packet->channel <= 8;
     // Keep a WOR preamble available for a later scan, even if this radio is
     // currently busy on another frequency. This is NOT parallel reception.
     if (deviceType == DevType::RELAY && retransmissionModel == RetransmissionModel::TS011 &&
@@ -523,6 +544,11 @@ void Radio::handleWorAcquisition(cMessage *timer)
 
 void Radio::receiveFromNetwork(LoRaPacket *msg, bool fromCad)
 {
+    if (lorawanMultichannel && deviceType == DevType::GATEWAY) {
+        if (acceptsAirDelivery(msg)) receiveMultichannelGateway(msg);
+        else delete msg;
+        return;
+    }
     if (msg->senderId != myKeeperIndex && deviceType == DevType::ENDNODE) {
         delete msg;
         return;
@@ -654,6 +680,54 @@ void Radio::receiveFromNetwork(LoRaPacket *msg, bool fromCad)
     scheduleAt(busyUntil, radioUpdateReceive);
 }
 
+void Radio::receiveMultichannelGateway(LoRaPacket *packet)
+{
+    const double threshold = sensitivity + std::sqrt(keeper->distortionLevel) +
+        2.5 * (12 - packet->spreadingFactor);
+    packet->rssi = getRssi(packet) + normal(0, par("pathlosStd"));
+    if (packet->isRelayed) packet->rssi += par("relayBackhaulLosGainDb").doubleValue();
+    packet->rssi_margin = packet->rssi - threshold;
+    packet->snr = std::max(-20.0, std::min(11.0, packet->rssi_margin - 6.0));
+    const auto end = simTime() + SimTime(packet->calcMsgDuration());
+    const long id = nextGatewayReception++;
+    gatewayReceptions.arrive(id, packet->channel, packet->rssi, packet->rssi > threshold,
+        radioActivity == RadioActivity::TRANSMITTING && simTime() < busyUntil,
+        simTime().raw(), end.raw());
+    ++gatewayOffered[packet->channel];
+    auto *timer = new cMessage("gatewayReceptionComplete");
+    timer->setSchedulingPriority(-20); // Half-open air intervals [start,end).
+    gatewayTimers.emplace(timer, GatewayReception{id, packet, simTime()});
+    scheduleAt(end, timer);
+    if (radioActivity != RadioActivity::TRANSMITTING) updateIdleRadioState();
+}
+
+void Radio::completeGatewayReception(cMessage *timer)
+{
+    const auto reception = gatewayTimers.at(timer);
+    gatewayTimers.erase(timer);
+    auto *packet = reception.packet;
+    const auto result = gatewayReceptions.complete(reception.id);
+    ++gatewayOutcomes[packet->channel][static_cast<int>(result)];
+    const bool delivered = result == GatewayReceptionBank::Result::Delivered;
+    keeper->recordFrameReception(myKeeperIndex, packet->getSenderModuleId(), packet->rssi, delivered);
+    if (gatewayTrace.is_open()) {
+        gatewayTrace << reception.start.dbl() << ',' << simTime().dbl() << ','
+            << (packet->hasPar("KeeperIndex") ? packet->par("KeeperIndex").longValue() : -1L) << ','
+            << (packet->hasPar("PacketId") ? packet->par("PacketId").longValue() : -1L) << ','
+            << packet->getKind() << ',' << static_cast<int>(packet->channel) << ','
+            << static_cast<int>(packet->spreadingFactor) << ',' << packet->rssi << ','
+            << GatewayReceptionBank::name(result) << '\n';
+    }
+    if (delivered) send(packet, "toLogic");
+    else if (result == GatewayReceptionBank::Result::Collision) dropByCollision(packet);
+    else delete packet; // Half duplex and low sensitivity are not RF collisions.
+    delete timer;
+    if (radioActivity != RadioActivity::TRANSMITTING) {
+        updateIdleRadioState();
+        if (!sendQueue.empty()) sendToNetwork(nullptr);
+    }
+}
+
 void Radio::dropByCollision(LoRaPacket *packet)
 {
     if (packet == nullptr)
@@ -698,7 +772,8 @@ void Radio::sendToNetwork(LoRaPacket *msg)
         delete msg;
         return;
     }
-    if ((radioActivity == RadioActivity::TRANSMITTING || radioActivity == RadioActivity::RECEIVING) &&
+    if ((radioActivity == RadioActivity::TRANSMITTING ||
+        (radioActivity == RadioActivity::RECEIVING && !(lorawanMultichannel && deviceType == DevType::GATEWAY))) &&
         simTime() < busyUntil) {
         sendQueue.push_back(*msg);
         delete msg;
@@ -726,12 +801,20 @@ void Radio::directSendWithDelete(LoRaPacket *msg)
     if (msg->spreadingFactor == -1)
         msg->spreadingFactor = lastSpreadingFactor;
 
+    if (lorawanMultichannel && deviceType == DevType::GATEWAY)
+        gatewayReceptions.startTransmission(simTime().raw());
+    if (lorawanMultichannel && deviceType == DevType::ENDNODE &&
+        msg->isUplink && !msg->relayRequired && !msg->isWOR() && msg->channel >= 1 && msg->channel <= 8) {
+        if (msg->getKind() == MsgType::JOINREQUEST) ++directJoinTx[msg->channel];
+        else ++directDataTx[msg->channel];
+    }
     activeReceiveChannel = msg->channel;
     updateRadioActivity(RadioActivity::TRANSMITTING);
     activeTxIsWor = msg->isWOR();
     const double duration = msg->calcMsgDuration();
     busyUntil = simTime() + duration;
     auto *done = new cMessage("radioTransmitComplete", SelfMsgType::TXTIMER);
+    if (lorawanMultichannel) done->setSchedulingPriority(-20);
     done->addPar("txKind") = msg->getKind();
     done->addPar("txChannel") = msg->channel;
     done->addPar("worAckExpected") = msg->isWOR() && msg->worType == WorType::CLASS_A_UPLINK;
@@ -830,7 +913,8 @@ void Radio::updateRadioActivity(RadioActivity::ra next)
 
 void GatewayRadio::updateIdleRadioState()
 {
-    updateRadioActivity(RadioActivity::LISTENING);
+    updateRadioActivity(lorawanMultichannel && gatewayReceptions.decoding(simTime().raw()) ?
+        RadioActivity::RECEIVING : RadioActivity::LISTENING);
 }
 
 bool GatewayRadio::roleAcceptsPacket(const LoRaPacket *packet) const
@@ -911,6 +995,24 @@ bool IpBridgeRadio::roleAcceptsPacket(const LoRaPacket *packet) const
 
 void Radio::finish()
 {
+    if (lorawanMultichannel && deviceType == DevType::GATEWAY) {
+        recordScalar("GW unfinished on-air signals", gatewayReceptions.size());
+        for (int channel = 1; channel <= 8; ++channel) {
+            const auto prefix = "GW channel " + std::to_string(channel) + " ";
+            recordScalar((prefix + "offered").c_str(), gatewayOffered[channel]);
+            for (int outcome = 1; outcome <= 5; ++outcome)
+                recordScalar((prefix + GatewayReceptionBank::name(
+                    static_cast<GatewayReceptionBank::Result>(outcome))).c_str(), gatewayOutcomes[channel][outcome]);
+        }
+        if (gatewayTrace.is_open()) gatewayTrace.flush();
+    }
+    if (lorawanMultichannel && deviceType == DevType::ENDNODE) {
+        for (int channel = 1; channel <= 8; ++channel) {
+            const auto suffix = " channel " + std::to_string(channel);
+            recordScalar(("Direct Join TX" + suffix).c_str(), directJoinTx[channel]);
+            recordScalar(("Direct data TX" + suffix).c_str(), directDataTx[channel]);
+        }
+    }
     updateRadioActivity(radioActivity);
     recordScalar("Energy consumption total Tx", energyConsumptionTx);
     recordScalar("Energy consumption total Rx", energyConsumptionRx);

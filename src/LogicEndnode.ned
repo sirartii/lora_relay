@@ -15,6 +15,11 @@ simple LogicEndnode
         int framesPerWindowMax = default(framesPerWindowMin);
         int windowsPerDay = default(2);
         int forceSF = default(12);
+        // Direct Join uses IDs 1..3, joined data uses IDs 1..8, uniformly.
+        // ED--RL access keeps its configured channel.
+        bool lorawanMultichannel = default(false);
+        // Optional operational-network initialization. Legacy runs still join normally.
+        bool startJoined = default(false);
         int applicationPayloadLength = default(51);
         int ackEvery = default(5);
         int ts011MissedAcksToRelay = default(1);

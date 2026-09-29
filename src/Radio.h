@@ -6,8 +6,11 @@
 #include <list>
 #include <string>
 #include <map>
+#include <array>
+#include <fstream>
 
 #include "Keeper.h"
+#include "GatewayReceptionBank.h"
 #include "LoRaPacket.h"
 #include "common.h"
 
@@ -40,6 +43,8 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     void sendToNetwork(LoRaPacket *msg);
     void directSendWithDelete(LoRaPacket *msg);
     void receiveFromNetwork(LoRaPacket *msg, bool fromCad = false);
+    void receiveMultichannelGateway(LoRaPacket *msg);
+    void completeGatewayReception(omnetpp::cMessage *timer);
     bool isConfiguredWorChannel(int channel) const;
     void scheduleWorAcquisition(LoRaPacket *packet, omnetpp::simtime_t earliest);
     void handleWorAcquisition(omnetpp::cMessage *timer);
@@ -74,6 +79,20 @@ class Radio : public omnetpp::cSimpleModule, public omnetpp::cListener
     int activeReceiveChannel = 1;
     int lastSpreadingFactor = 12;
     int collisionCount = 0;
+    bool lorawanMultichannel = false;
+    GatewayReceptionBank gatewayReceptions;
+    struct GatewayReception {
+        long id;
+        LoRaPacket *packet;
+        omnetpp::simtime_t start;
+    };
+    long nextGatewayReception = 0;
+    std::map<omnetpp::cMessage *, GatewayReception> gatewayTimers;
+    std::array<long, 9> gatewayOffered{};
+    std::array<std::array<long, 7>, 9> gatewayOutcomes{};
+    std::array<long, 9> directJoinTx{};
+    std::array<long, 9> directDataTx{};
+    std::ofstream gatewayTrace;
     double rssiOfCurrentReceive = -200;
     bool disableClassAWindows = false;
     bool rxrPending = false;

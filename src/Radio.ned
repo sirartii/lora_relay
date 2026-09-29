@@ -8,6 +8,9 @@ simple Radio
         @display("i=block/wrxtx");
         double txPower = default(14);
         int forceSF = default(12);
+        // Opt-in: legacy scenarios keep the original one-channel GW model.
+        bool lorawanMultichannel = default(false);
+        bool exportGatewayReceives = default(false);
         double pathlosStd;
         double sensitivityAllRadios;
         // ED<->RL access link uses the baseline propagation model by default.
@@ -31,7 +34,8 @@ simple Radio
         double epRxrDelay @unit(s) = default(7s);
 
         // Logical non-overlapping frequencies, NOT regional-plan channel indices.
-        // Ordinary LoRaWAN traffic uses ID 1; WOR uses separate IDs 10 and 11.
+        // Ordinary traffic: legacy ID 1, multichannel IDs 1..8.
+        // WOR uses separate IDs 10 and 11 in both modes.
         int ts011DefaultWorChannel = default(10);
         int ts011SecondWorChannel = default(11);
         bool ts011SecondChannelEnabled = default(false);

@@ -95,6 +95,7 @@ class LogicEndnode : public omnetpp::cSimpleModule
     int applicationPayloadLength = 51;
     int missedPacketsToSearchRelay = 2;
     int forceSpreadingFactor = 12;
+    bool lorawanMultichannel = false;
     omnetpp::simtime_t lastAckTime;
     omnetpp::simtime_t lastOnline;
     double offlineMax = 0;

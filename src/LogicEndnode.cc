@@ -40,6 +40,12 @@ void LogicEndnode::initialize()
     ts011JoinRelayEvery = std::max(1, static_cast<int>(par("ts011JoinRelayEvery").intValue()));
     missedPacketsToSearchRelay = std::max(1, static_cast<int>(par("missedPacketsToSearchRelay").intValue()));
     forceSpreadingFactor = par("forceSF").intValue();
+    lorawanMultichannel = par("lorawanMultichannel").boolValue();
+    sessionJoined = par("startJoined").boolValue();
+    // Existing sessions do not share an ACK counter phase. Randomize it only
+    // for this opt-in warm start, leaving the legacy RNG stream untouched.
+    if (sessionJoined)
+        dataCounter = intrand(ackEvery);
     model = static_cast<RetransmissionModel>(par("retransmissionModel").intValue());
 
     ts011EndDeviceSpreadingFactor = par("ts011EndDeviceSpreadingFactor").intValue();
@@ -66,6 +72,8 @@ void LogicEndnode::initialize()
     lastAckTime = simTime();
     lastOnline = simTime();
     updateLogicalState(EndDeviceState::OFFLINE);
+    if (sessionJoined)
+        updateSessionState();
 
     for (int i = 0; i < windowsPerDay; ++i) {
         windowTimers[i] = new cMessage(i == 0 ? "applicationWindow1" : "applicationWindow2",
@@ -414,6 +422,10 @@ void LogicEndnode::sendDataFrame(int packetId, bool join, bool ackRequired, bool
     packet->length = join ? 23 : applicationPayloadLength;
     packet->spreadingFactor = relayed ? ts011EndDeviceSpreadingFactor : forceSpreadingFactor;
     packet->channel = relayed ? ts011UplinkChannel : 1;
+    // Do not consume another RNG draw in legacy or ED--RL access mode.
+    // Every direct attempt draws independently, including repeated Joins.
+    if (lorawanMultichannel && !relayed)
+        packet->channel = 1 + intrand(join ? 3 : 8);
     packet->joinEui = 0x0102030405060708ULL;
     packet->devEui = static_cast<unsigned int>(myKeeperIndex);
     packet->addPar("KeeperIndex") = myKeeperIndex;
