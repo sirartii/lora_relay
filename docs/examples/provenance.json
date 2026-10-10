@@ -1,0 +1,29 @@
+{
+  "description": "README figure provenance",
+  "delivery": {
+    "source_file": "B11_probabilities.json",
+    "source_sha256": "a0ca02b0dac0857de0d2ee9e90564bf4e68bdc06b44f1c8617c377c4c842bff9",
+    "archive_revision": "E-003 (2026-09-19)",
+    "replications_per_point": 30,
+    "simulation_days": 30,
+    "warmup_days": 4,
+    "quality_days": 26,
+    "gateway_count": 1,
+    "relay_count": 2,
+    "notes": "Archived study; predates E-005 frequency separation, E-006 dynamic WOR energy, and optional multichannel reception. This is not a new benchmark of the current branch."
+  },
+  "model_characteristics": {
+    "source_commit": "c2e7f6c262dd1326f240437ad30f9111d1832364",
+    "source_files": [
+      "src/LoRaPacket.cc",
+      "src/WorEnergy.h"
+    ],
+    "bandwidth_hz": 125000,
+    "coding_rate": "4/5",
+    "cad_spreading_factor": 9,
+    "cad_symbols": 4,
+    "cad_duration_ms": 19.145,
+    "cad_current_ma": 3.84,
+    "sleep_current_ma": 0.0056
+  }
+}
