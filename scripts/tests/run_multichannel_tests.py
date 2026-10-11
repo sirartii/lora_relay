@@ -1,3 +1,42 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: run_multichannel_tests.py
+#
+# DZIAŁANIE
+# Buduje test C++ odbioru bramy i program integracyjny korzystający z Radio,
+# uruchamia 7 scenariuszy PHY, porównuje legacy z bazą i bada wybór kanałów.
+#
+# WEJŚCIE I PARAMETRY
+# Wszystkie opcje wymagane: --repo (repozytorium), --omnet (instalacja OMNeT++
+# z clang64), --output (katalog roboczy), --baseline (referencyjny plik .sca).
+# Potrzebne out/clang-release/src/*.o, opp-lora-relay-official.exe, źródła testów
+# C++ i MultichannelTest.ned w scripts/tests. Baseline musi pochodzić ze
+# zgodnego Chapter7_T02: -r 0, sim-time-limit=1d, warmup-period=0s.
+# Parametry testów są stałe: PHY 0..6 po 12 s, Uniform 100 ED i 30 dni;
+# DATA > 10000 nadań, udział każdego z 8 kanałów ściśle 10..15%.
+# Join ma używać kanałów 1..3; legacy porównuje wszystkie wartości skalarów.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zachowaj baseline ze znanej poprawnej wersji modelu i konfiguracji
+# (procedura w scripts/README.md, „Testy”). Po zmianach zbuduj release:
+#   make MODE=release -j4
+# Runner sam tworzy tests.ini i dane w podkatalogach phy_0..6, legacy_after,
+# uniform. Baseline trzymaj poza --output; nie twórz go z nowego modelu,
+# jeśli celem jest wykrycie regresji względem wersji wcześniejszej.
+#
+# URUCHOMIENIE
+# python scripts/tests/run_multichannel_tests.py --repo . --omnet C:/omnetpp-6.4.0 --output tmp/multichannel_tests --baseline tmp/legacy_baseline/result.sca
+#
+# PRZYKŁADOWY WYNIK
+# test_report.json, programy testowe, logi kompilacji i result.sca w katalogach
+# przebiegów. Przy sukcesie JSON zawiera unit="passed", 7 wpisów integration,
+# legacy.status="identical", liczniki kanałów oraz gateway_accounting.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, biblioteka standardowa, Windows/clang64, OMNeT++ i kompilator C++.
+# Nie ma PNG. Użyj świeżego --output: tekstowe eksporty symulatora są dopisywane.
+# Testy kończą się wyjątkiem przy błędzie budowania, symulacji lub asercji.
+# =============================================================================
+
 """Build and exercise the real Radio implementation, with isolated output files."""
 import argparse
 import json

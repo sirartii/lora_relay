@@ -1,3 +1,47 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: analyze_b11_energy.py
+#
+# DZIAŁANIE
+# Wyznacza średni prąd RL oraz udziały Tx/Rx/WOR/Idle/BaseOffset z ładunku
+# w skalarach; sprawdza bilans czasu i oblicza 95% PU oraz sparowane różnice.
+#
+# WEJŚCIE I PARAMETRY
+# --output: plik JSON, domyślnie ROOT/B11_energy_analysis.json; rodzic tworzony.
+# ROOT = C:/Omnet/simulation_results/review_chapter1, bez opcji CLI zmiany.
+# 900 plików results.sca: 3 warianty x 10 obciążeń 55..550 ED x 30 powtórzeń.
+# Dokładnie 2 RL na przebieg, 30*86400 s, nieujemne skończone składniki.
+# Wymagane prądy w mA: Tx=25.5, Rx=4.6, WOR=0.07, Idle=0.0056,
+# BaseOffset=0.003; ładunek LTE attach i LTE transmit musi być zerowy.
+# Dopuszczalny błąd odtworzenia czasu: < 0.001 s.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/analyze_b11_energy.py --output tmp/B11_energy_analysis.json
+#
+# PRZYKŁADOWY WYNIK
+# tmp/B11_energy_analysis.json: duration_s=2592000, replications=30,
+# summary, shares_percent, paired_differences, raw_components_uA, sources.
+# Stdout: podsumowanie JSON; wykresy tworzy generate_b11_energy_figures.py.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, NumPy, SciPy. Skalary o nazwie Energy mają jednostkę mA*s
+# (ładunek); wynik w µA. Jednostką replikacji jest przebieg sieci, nie każdy RL.
+# Stałe i bilans odpowiadają historycznemu B11; inny model może nie przejść asercji.
+# Odczytywane są też src/Radio.cc i src/Radio.ned pod C:/Omnet/lora_relay (SHA-256).
+# =============================================================================
+
 """Full-precision relay charge balance from existing B11 scalar files."""
 from pathlib import Path
 import argparse

@@ -1,3 +1,45 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_delay_figure.py
+#
+# DZIAŁANIE
+# Analizuje skalar Average packet time z pełną precyzją: średnie opóźnienia,
+# 95% PU, sparowane różnice i dopasowania dla trzech wariantów B11.
+#
+# WEJŚCIE I PARAMETRY
+# --results: katalog wyników, domyślnie C:/Omnet/simulation_results/review_chapter1.
+# --figures i --diagnostics: wymagane katalogi wyjściowe, tworzone automatycznie.
+# 900 par results.sca i exec_results.txt (3 x 10 obciążeń x 30 replik).
+# Wymagane opóźnienie > 0 s, 26 dni statystyki, 55..550 ED co 55;
+# różnica względem zaokrąglonego logu <= 0.00500001 s.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/generate_b11_delay_figure.py --figures tmp/b11_figures --diagnostics tmp/b11_diagnostics
+#
+# PRZYKŁADOWY WYNIK
+# B11_opoznienie.png/.pdf i B11_delay_analysis.json; stdout: JSON z listą
+# wykresów, wynikami dla 385 ED, różnicami i wybranymi dopasowaniami.
+# Podgląd: generate_b11_delay_figure_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy, SciPy. Metryka obejmuje tylko doręczone UL,
+# od zgłoszenia do radia ED; nie obejmuje wcześniejszego WOR ani utraconych ramek.
+# Część ilustracyjna JSON zakłada historyczną zwłokę RL=1 s; nie czyta jej z INI.
+# SHA-256 źródeł pochodzi z bieżącego C:/Omnet/lora_relay, nie z archiwum wyników.
+# =============================================================================
+
 """Analyse the existing B11 delay scalar at full precision; no simulations."""
 from __future__ import annotations
 

@@ -1,3 +1,34 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: test_measured_multichannel.py
+#
+# DZIAŁANIE
+# Testy unittest przygotowania konfiguracji pomiarowej: niepełne parametry,
+# kompletny scenariusz i odrzucanie niepoprawnych wartości.
+#
+# WEJŚCIE I PARAMETRY
+# Brak własnych opcji CLI; obsługiwane są standardowe opcje unittest,
+# np. -v (nazwy testów), -q (zwięźle), -f (stop po błędzie).
+# Testy same tworzą dwuwierszowy CSV (SF12/SF11), parametry JSON i katalogi
+# tymczasowe. Wywołują prepare_measured_multichannel.py bieżącym Pythonem.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Nie wymaga danych z symulatora ani kompilacji C++. Dane testowe są syntetyczne
+# i powstają w TemporaryDirectory; katalogi są usuwane po teście.
+# Do rzeczywistej symulacji pomiarowej użyj prepare_measured_multichannel.py
+# i procedury w scripts/README.md.
+#
+# URUCHOMIENIE
+# python scripts/tests/test_measured_multichannel.py -v
+#
+# PRZYKŁADOWY WYNIK
+# Raport unittest na stderr: trzy nazwy testów, „Ran 3 tests in ...s”, „OK”.
+# Kod zakończenia 0 oznacza sukces. Brak trwałych plików wynikowych i PNG.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, biblioteka standardowa. Sąsiedni skrypt przygotowania musi
+# pozostać w scripts/prepare_measured_multichannel.py.
+# =============================================================================
+
 import csv
 import json
 from pathlib import Path

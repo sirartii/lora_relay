@@ -1,4 +1,54 @@
 #!/usr/bin/env python3
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_review_chapter1_results.py
+#
+# DZIAŁANIE
+# Uruchamia zestawy eksperymentów do odpowiedzi recenzentom, zachowuje surowe
+# wyniki, polecenia, tabele CSV, wykresy i wybrane źródła odtwarzania.
+#
+# WEJŚCIE I PARAMETRY
+# --repo: domyślnie C:/Omnet/lora_relay; --exe: domyślnie
+# C:/Omnet/lora_relay/out/clang-release/src/opp-lora-relay-official.exe.
+# --output: domyślnie C:/Omnet/simulation_results/review_chapter1.
+# --figures: domyślnie C:/Omnet/DoktoratAF/img/recenzje/chapter1.
+# --runs: domyślnie 30; dodatnia liczba całkowita, praktycznie 1..30 wg repeat INI.
+# Niektóre grupy wymuszają minimum 15 lub 20 replik; wykres B11 wymaga 30.
+# --workers: liczba procesów symulatora, domyślnie 4, wartości < 1 zastępowane przez 1.
+# --groups: all (domyślnie) lub lista oddzielona przecinkami: b11_comparison,
+# n15_infrastructure,b10_alarm,b08_window_n,b08_ts011_channels,n18_adr,
+# n07_initialization,n10_relay_load,n08_n11_weak_share,n12_n13_gateway_position,
+# n14_relay_position,p16_distribution,p05_p06_propagation.
+# Flagi: --plots-only (analiza gotowych danych), --no-resume (ponowne przebiegi),
+# --quick (3 repliki i maks. 3 dni, warmup=0); domyślnie wyłączone.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Skrypt sam uruchamia symulator. Zbuduj go: make MODE=release -j4 w terminalu
+# OMNeT++ z katalogu repozytorium; jeśli brak src/Makefile: make makefiles.
+# Używa simulations/omnetpp_review.ini i runtime z C:/omnetpp-6.4.0 (stałe w kodzie).
+# W trybie --plots-only przygotuj variants/<grupa>__<wariant>/runs/run_XX/
+# z exec_results.txt i results.sca; do analiz topologii zachowaj też eksport Keeper.
+# Pełne B11: trzy serie x dziesięć obciążeń x 30 powtórzeń, 30 dni i warmup=4 dni.
+# Szczegóły oraz polecenia dla analiz pochodnych: scripts/README.md, „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --figures tmp/b11_figures
+# Po zakończeniu tę samą komendę z --plots-only można użyć do odtworzenia wykresów.
+#
+# PRZYKŁADOWY WYNIK
+# chapter1_runs.csv, chapter1_summary.csv, plan.json, manifest.json,
+# variants/*/runs/* oraz reproducibility/ w --output; wykresy w --figures.
+# Stdout: Running 900 simulations in 30 variants, postęp i manifest JSON.
+# Podgląd porównania B11: generate_review_chapter1_results_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy, SciPy, Git; nowe przebiegi wymagają OMNeT++.
+# Aktualny make_plots zawsze oczekuje grupy b11_comparison. Samodzielna inna grupa
+# może zakończyć się błędem wykresu; --quick również nie spełnia wymagań wykresu B11.
+# --no-resume usuwa pliki w katalogach wybranych przebiegów. Wznowienie nie sprawdza
+# zgodności modelu; do zmienionej konfiguracji wybierz nowy --output i --figures.
+# Migawka reproducibility zawiera wybrane źródła, nie całe środowisko kompilacji.
+# =============================================================================
+
 """Run the experiments used in chapter 1 of the reviewer responses.
 
 The script deliberately keeps raw OMNeT++ scalars, the exact command line for

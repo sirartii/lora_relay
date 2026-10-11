@@ -1,4 +1,50 @@
 #!/usr/bin/env python3
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: plot_topology.py
+#
+# DZIAŁANIE
+# Rysuje jeden przebieg lub skumulowaną topologię wielu przebiegów.
+# Kolor ED przedstawia dzienną skuteczność UL; GW/RL/IPB mają osobne symbole.
+#
+# WEJŚCIE I PARAMETRY
+# input: wymagany plik tekstowy eksportu Keeper, co najmniej jeden pełny przebieg.
+# -o/--output: plik graficzny, domyślnie topology.png (format wg rozszerzenia).
+# --runs: all (domyślnie), indeks, lista 0,2,5 lub zakres 0-5; indeksy od 0
+# do liczby przebiegów minus 1, końce zakresu włącznie.
+# --title: dowolny tekst; domyślnie tytuł tworzony automatycznie.
+# --point-size: rozmiar znacznika w pt², zalecane > 0, domyślnie 24.
+# --alpha: przezroczystość 0..1, domyślnie 0.88.
+# --no-labels: ukrywa etykiety stałych węzłów; domyślnie są widoczne.
+#
+# --cmap: nazwa palety Matplotlib, domyślnie viridis.
+# --dpi: dodatnia liczba całkowita, domyślnie 180.
+# --canvas: cztery liczby XMIN XMAX YMIN YMAX w metrach; zalecane
+# XMIN < XMAX i YMIN < YMAX; bez opcji zakres wynika z punktów.
+# --lenient: domyślnie wyłączone; pomija niekompletne bloki, a także
+# wyłącza kontrolę zakresu procentów. Nie naprawia błędnych pomiarów.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zbuduj symulator w trybie release (instrukcja: scripts/README.md).
+# Z katalogu repozytorium wygeneruj sześć pełnych przebiegów:
+#   python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Plik wejściowy powstanie pod ścieżką:
+#   tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt
+# W przykładach PowerShell przypisz tę ścieżkę do zmiennej $topology.
+# Eksport Keeper zawiera sekcje role,idx,x,y oraz
+# idx,x,y,avg_daily_success_UL[%]; wartości skuteczności są procentami 0..100.
+#
+# URUCHOMIENIE
+# python scripts/plot_topology.py $topology --runs 0 --canvas 0 1400 0 900 -o tmp/topology.png
+#
+# PRZYKŁADOWY WYNIK
+# Plik tmp/topology.png oraz jego bezwzględna ścieżka na stdout.
+# Podgląd: plot_topology_example.png obok skryptu.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib. Polecenia wykonuj z katalogu repozytorium.
+# Zakresy opisane jako zalecane nie są dodatkowo sprawdzane przez argparse.
+# =============================================================================
+
 """Draw one run or an aggregate of runs from exec_results_topology.txt."""
 
 from __future__ import annotations

@@ -1,3 +1,32 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: test_topology_io.py
+#
+# DZIAŁANIE
+# Testy unittest parsera: dopisywane przebiegi, stałe węzły, indeksy i zakresy,
+# niezgodna liczba ED oraz pomijanie niekompletnego bloku w trybie lenient.
+#
+# WEJŚCIE I PARAMETRY
+# Brak własnych opcji CLI; standardowe opcje unittest, np. -v, -q, -f.
+# Stała SAMPLE zawiera 2 przebiegi po 2 ED i 2 stałe węzły.
+# Testy tworzą tymczasowy exec_results_topology.txt i importują topology_io.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Symulator nie jest wymagany. Syntetyczny eksport jest zapisany w SAMPLE
+# i zapisywany do TemporaryDirectory na czas każdego testu.
+# Dla danych rzeczywistych uruchom scenariusz Chapter7_T02 zgodnie
+# z scripts/README.md i użyj eksportu Keeper w plot_topology.py.
+#
+# URUCHOMIENIE
+# python scripts/tests/test_topology_io.py -v
+#
+# PRZYKŁADOWY WYNIK
+# Raport unittest na stderr: cztery nazwy testów, „Ran 4 tests in ...s”, „OK”.
+# Przykładowa średnia SAMPLE: 83.335%. Brak trwałych plików i PNG.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, biblioteka standardowa; nie wymaga Matplotlib ani danych B11.
+# =============================================================================
+
 from __future__ import annotations
 
 from pathlib import Path

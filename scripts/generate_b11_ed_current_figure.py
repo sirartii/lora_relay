@@ -1,3 +1,46 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_ed_current_figure.py
+#
+# DZIAŁANIE
+# Rysuje średni prąd ED dla EP4312388 i historycznego TS011, 95% PU oraz
+# nierosnące dopasowania wybierane przez błąd LOO.
+#
+# WEJŚCIE I PARAMETRY
+# --source: JSON z analyze_b11_ed_energy.py; domyślnie
+# C:/Omnet/simulation_results/review_chapter1/B11_ed_energy_analysis.json.
+# --output: katalog, domyślnie scripts/energy_figures; tworzony automatycznie.
+# Wymagane summary[ep4312388|ts011][55..550 co 55].total_uA z mean i ci95,
+# w µA. Wykres ma stałą oś Y=25..29.4 µA i referencję idle=25.3 µA.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# Następnie oblicz bilanse:
+#   python scripts/analyze_b11_ed_energy.py
+#
+# URUCHOMIENIE
+# python scripts/generate_b11_ed_current_figure.py --output tmp/b11_ed_figures
+#
+# PRZYKŁADOWY WYNIK
+# B11_prad_ED.png/.pdf w --output; B11_ed_current_fits.json OBOK --source.
+# Stdout: JSON z diagnostyką dopasowań.
+# Podgląd: generate_b11_ed_current_figure_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy, SciPy; importuje generate_b11_delay_figure.
+# Wyniki spoza zakresu legacy mogą nie pasować do stałej osi lub rodzin dopasowań.
+# =============================================================================
+
 """Mean ED current plot: EP and legacy TS, from validated existing runs."""
 from pathlib import Path
 import argparse

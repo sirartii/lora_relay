@@ -1,3 +1,48 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_energy_figures.py
+#
+# DZIAŁANIE
+# Rysuje średni prąd RL z 95% PU oraz udziały składników dla 55 i 385 ED.
+# Porównuje EP4312388 i historyczny TS011 z zatwierdzonych bilansów ładunku.
+#
+# WEJŚCIE I PARAMETRY
+# --source: JSON z analyze_b11_energy.py; domyślnie
+# C:/Omnet/simulation_results/review_chapter1/B11_energy_analysis.json.
+# --output: katalog, domyślnie scripts/energy_figures; tworzony automatycznie.
+# W JSON wymagane summary[ep4312388|ts011][55..550 co 55], total_uA
+# z mean/ci95 i components_uA dla Rx,Tx,WOR,Idle,BaseOffset.
+# Wartości prądu w µA, nieujemne. Wykres udziałów ma układ dla danych legacy B11.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# Następnie oblicz bilanse (polecenie z katalogu repozytorium):
+#   python scripts/analyze_b11_energy.py
+#
+# URUCHOMIENIE
+# python scripts/generate_b11_energy_figures.py --output tmp/b11_energy_figures
+#
+# PRZYKŁADOWY WYNIK
+# B11_prad_relay.png/.pdf i B11_energia_skladowe.png/.pdf w --output.
+# B11_energy_fits.json jest zapisywany OBOK --source; stdout: JSON z dopasowaniami.
+# Podgląd średniego prądu: generate_b11_energy_figures_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy. Jednakowe rozmiary kół pokazują skład,
+# nie bezwzględną energię. Do osobnego katalogu roboczego skopiuj także --source,
+# jeśli nie chcesz dopisywać pliku dopasowań przy źródłowym raporcie.
+# =============================================================================
+
 """Scientific figures from validated relay charge balances (no new runs)."""
 from pathlib import Path
 import argparse

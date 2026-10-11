@@ -1,4 +1,47 @@
 #!/usr/bin/env python3
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: plot_topology_grid.py
+#
+# DZIAŁANIE
+# Rysuje osobny panel dla każdego wybranego przebiegu, ze wspólnymi osiami
+# i skalą kolorów skuteczności 0..100%.
+#
+# WEJŚCIE I PARAMETRY
+# input: wymagany plik eksportu Keeper z wybranymi pełnymi przebiegami.
+# -o/--output: plik, domyślnie topology_runs.png.
+# --runs: all, indeksy lub zakresy od 0; domyślnie 0-5 (wymaga >= 6 przebiegów).
+# --columns: liczba kolumn >= 1, domyślnie 3; warunek sprawdzany w skrypcie.
+# --point-size: pt², zalecane > 0, domyślnie 23.
+# --no-labels: ukrywa etykiety GW/RL/IPB; domyślnie wyłączone.
+#
+# --cmap: nazwa palety Matplotlib, domyślnie viridis.
+# --dpi: dodatnia liczba całkowita, domyślnie 180.
+# --canvas: cztery liczby XMIN XMAX YMIN YMAX w metrach; zalecane
+# XMIN < XMAX i YMIN < YMAX; bez opcji zakres wynika z punktów.
+# --lenient: domyślnie wyłączone; pomija niekompletne bloki, a także
+# wyłącza kontrolę zakresu procentów. Nie naprawia błędnych pomiarów.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zbuduj symulator w trybie release (instrukcja: scripts/README.md).
+# Z katalogu repozytorium wygeneruj sześć pełnych przebiegów:
+#   python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Plik wejściowy powstanie pod ścieżką:
+#   tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt
+# W przykładach PowerShell przypisz tę ścieżkę do zmiennej $topology.
+# Eksport Keeper zawiera sekcje role,idx,x,y oraz
+# idx,x,y,avg_daily_success_UL[%]; wartości skuteczności są procentami 0..100.
+#
+# URUCHOMIENIE
+# python scripts/plot_topology_grid.py $topology --runs 0-5 --columns 3 -o tmp/topology_grid.png
+#
+# PRZYKŁADOWY WYNIK
+# tmp/topology_grid.png: sześć paneli z numerami przebiegów i średnią skutecznością.
+# Stdout: ścieżka zapisanego pliku. Podgląd: plot_topology_grid_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib. Nie wybieraj indeksów spoza pliku wejściowego.
+# =============================================================================
+
 """Draw selected simulation runs as a shared-scale subplot grid."""
 
 from __future__ import annotations

@@ -1,3 +1,45 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: analyze_b11_ed_energy.py
+#
+# DZIAŁANIE
+# Oblicza średni prąd wszystkich ED, składniki prądu i sparowaną różnicę
+# TS011–EP; najpierw uśrednia ED w przebiegu, następnie 30 przebiegów.
+#
+# WEJŚCIE I PARAMETRY
+# --output: plik JSON, domyślnie ROOT/B11_ed_energy_analysis.json.
+# ROOT i czas są importowane z analyze_b11_energy.py, bez opcji CLI zmiany.
+# 600 plików results.sca: ep4312388 i ts011, 55..550 ED co 55, run_00..29.
+# Czas 2592000 s. Prądy ED w mA: Tx=25.5, Rx=4.6, WOR=0.89,
+# Idle=0.0253, BaseOffset=0; składniki skończone i >= 0; LTE=0.
+# Liczba ED musi odpowiadać obciążeniu, błąd bilansu czasu < 0.001 s.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/analyze_b11_ed_energy.py --output tmp/B11_ed_energy_analysis.json
+#
+# PRZYKŁADOWY WYNIK
+# JSON z summary, raw_run_mean_components_uA, paired_TS_minus_EP_uA,
+# ed_balances_checked i sources; przy pełnym zestawie ed_balances_checked=181500.
+# Stdout: podsumowanie JSON; wykres tworzy generate_b11_ed_current_figure.py.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, NumPy, SciPy oraz sąsiedni analyze_b11_energy.py.
+# Średnia dotyczy całych 30 dni, łącznie z inicjalizacją i ED bez doręczonych ramek.
+# Czyta także lokalne src/Radio.cc i Radio.ned dla SHA-256; wymaga zgodnego modelu.
+# =============================================================================
+
 """End-device average current from all ED scalars in 600 existing B11 runs."""
 from pathlib import Path
 import argparse

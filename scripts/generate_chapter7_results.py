@@ -1,4 +1,58 @@
 #!/usr/bin/env python3
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_chapter7_results.py
+#
+# DZIAŁANIE
+# Uruchamia scenariusze rozdziału 7, zachowuje wyniki każdego przebiegu,
+# agreguje metryki i tworzy wykresy topologii, skuteczności oraz prądu.
+#
+# WEJŚCIE I PARAMETRY
+# --repo: katalog repozytorium, domyślnie rodzic scripts.
+# --exe: program symulatora, domyślnie
+# C:/Omnet/lora_relay/out/clang-release/src/opp-lora-relay-official.exe.
+# --output: katalog, domyślnie C:/Omnet/simulation_results/chapter7.
+# --runs: całkowite >= 1, domyślnie 30; INI ma repeat=30, więc bez zmiany INI
+# używaj 1..30. --days: całkowite >= 1, domyślnie 30; dla statystyk > warmup (4 dni).
+# --sections: lista rozdzielona przecinkami z table,7.2,7.3,7.5,7.6,7.7,7.12,7.13;
+# domyślnie wszystkie. --scenarios: all (domyślnie) lub lista t01..t13.
+# --n-values: dodatnie liczby całkowite, domyślnie 1,2,3,4,5,6,7,8 (ramki/okno).
+# --populations: dodatnie liczby całkowite centralnych ED; domyślnie 50..500 co 50.
+# --figure-713-models: all albo podzbiór t02,t08,t09,t10,t11,t12.
+# --rx-current-ma: liczba rzeczywista, fizycznie >= 0 mA, domyślnie 4.6;
+# argparse nie sprawdza tego zakresu.
+# --table-source: opcjonalny katalog historycznego eksportu full_with_scalars
+# i Table71_Txx-<run>.sca; import obejmuje 30 replik, szczegóły w README.
+# Flagi (domyślnie wyłączone): --plots-only (gotowe dane), --no-resume
+# (przelicza przebiegi), --keep-vectors (zachowuje .vec/.vci), --list (sam plan).
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Ten skrypt sam generuje dane. Najpierw w terminalu OMNeT++ w repozytorium:
+#   make MODE=release -j4
+# Jeśli brak src/Makefile, wcześniej: make makefiles.
+# Sprawdź plik wykonywalny wskazany przez --exe oraz simulations/omnetpp_chapter7.ini.
+# Ścieżki runtime OMNeT++ są stałymi OMNET_BIN/OMNET_CLANG_BIN; domyślnie 6.4.0.
+# Do --plots-only zachowaj strukturę scenarios/sweeps, teksty Keeper/LNS i .sca.
+# Rysunki 7.6/7.7 wymagają exec_result_frames.txt dla t05,t06,t09.
+# Pełna instrukcja przygotowania środowiska i danych: scripts/README.md.
+#
+# URUCHOMIENIE
+# python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Sam plan, bez symulacji: python scripts/generate_chapter7_results.py --list
+#
+# PRZYKŁADOWY WYNIK
+# tmp/docs_demo/chapter7_summary.csv, manifest.json, README.md oraz
+# scenarios/02_1GW_SF12_N1_12h/{runs,summary.json,metrics_runs.csv,
+# exec_results_topology.txt,figure_7_1_style_topology.png}.
+# Stdout kończy się „Gotowe: <katalog>”. Podgląd: generate_chapter7_results_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib oraz zbudowany symulator do nowych przebiegów.
+# --plots-only nie uruchamia symulatora, ale zapisuje podsumowania i wykresy.
+# Wznowienie sprawdza obecność wyniku, nie zgodność parametrów; po zmianie modelu
+# użyj nowego --output. --no-resume usuwa stare wyniki wybranych przebiegów.
+# --table-source zastępuje istniejący katalog runs scenariusza t12.
+# =============================================================================
+
 """Run and plot the complete chapter 7 LoRa simulation result set.
 
 The simulator writes text files (``exec_results*.txt``); those files remain

@@ -1,3 +1,44 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: topology_io.py
+#
+# DZIAŁANIE
+# Moduł biblioteczny: odczytuje eksport Keeper do obiektów TopologyFile,
+# TopologyRun, EndDevice i FixedNode; wybiera przebiegi i usuwa duplikaty GW/RL/IPB.
+#
+# WEJŚCIE I PARAMETRY
+# Brak interfejsu CLI. parse_topology(path, strict=True): path to str lub Path;
+# strict=True wymaga zgodnej liczby ED i skuteczności 0..100%.
+# strict=False pomija niekompletne bloki i wyłącza kontrolę procentów.
+# select_runs(topology, selection): all, indeksy od 0, lista 0,2 lub zakres 0-5;
+# indeksy muszą istnieć, zakresy są obustronnie domknięte (także malejące).
+# unique_fixed_nodes(groups): iterowalne grupy FixedNode; klucz role/index/x/y.
+# Współrzędne są liczbami w metrach; ujemny indeks ED oznacza historyczny węzeł wyspy.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zbuduj symulator w trybie release (instrukcja: scripts/README.md).
+# Z katalogu repozytorium wygeneruj sześć pełnych przebiegów:
+#   python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Plik wejściowy powstanie pod ścieżką:
+#   tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt
+# W przykładach PowerShell przypisz tę ścieżkę do zmiennej $topology.
+# Eksport Keeper zawiera sekcje role,idx,x,y oraz
+# idx,x,y,avg_daily_success_UL[%]; wartości skuteczności są procentami 0..100.
+#
+# URUCHOMIENIE
+# Przykład API w Pythonie (po dodaniu scripts do sys.path):
+#   from topology_io import parse_topology, select_runs
+#   data = parse_topology("tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt")
+#   print(len(data.runs), len(select_runs(data, "0")[0].devices))
+#
+# PRZYKŁADOWY WYNIK
+# Dla sześciu przebiegów domyślnego Chapter7_T02: 6 55.
+# Moduł nie zapisuje plików ani nie rysuje obrazu samodzielnie.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, wyłącznie biblioteka standardowa. Indeksy wewnętrzne
+# są nadawane po parsowaniu; pominięte bloki zmieniają numerację w trybie lenient.
+# =============================================================================
+
 """Parser for the text topology files produced by Keeper.cc.
 
 The simulator appends many runs to one ``exec_results_topology.txt`` file.

@@ -1,3 +1,45 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_topology_figure.py
+#
+# DZIAŁANIE
+# Rysuje zarejestrowaną topologię B11 dla 385 ED, rozdzielając 350 centralnych
+# i wyspy 18+17. Sprawdza identyczność topologii trzech wariantów.
+#
+# WEJŚCIE I PARAMETRY
+# --results: katalog wyników, domyślnie C:/Omnet/simulation_results/review_chapter1.
+# --output: wymagany katalog PNG/PDF/JSON, tworzony automatycznie.
+# --run: indeks przebiegu, domyślnie 0; dla standardowego B11: 0..29.
+# Wejścia: reproducibility/simulations/omnetpp_review.ini oraz topologie
+# trzech wariantów *_350. Muszą zawierać dokładnie 1 przebieg, 385 ED,
+# 1 GW i 2 RL; indeksy w grupach: 0..349, 0..17, 0..16.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/generate_b11_topology_figure.py --run 0 --output tmp/b11_topology
+#
+# PRZYKŁADOWY WYNIK
+# B11_topologia_385.png/.pdf/.json; stdout: metadane, współrzędne GW/RL,
+# group_counts=[350,18,17], źródła i SHA-256.
+# Podgląd: generate_b11_topology_figure_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib i sąsiednie moduły topology_io/topology_plotting.
+# Obrysy prostokątów oznaczają obszary losowania ED, nie granice zasięgu.
+# Skrypt dodaje C:/Omnet/lora_relay/scripts do ścieżki importów.
+# =============================================================================
+
 """Draw the recorded B11 topology, without simulating or inventing radio links."""
 from __future__ import annotations
 

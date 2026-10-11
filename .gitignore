@@ -12,3 +12,6 @@ simulations/exec_result_frames.txt
 simulations/exec_results.txt
 simulations/exec_results_topology.txt
 simulations/exec_results.txt
+
+# Keep Markdown documentation local until translated for publication.
+*.[mM][dD]

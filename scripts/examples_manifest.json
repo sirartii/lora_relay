@@ -1,0 +1,367 @@
+{
+  "created_date": "2026-10-11",
+  "description": "Podglądy wygenerowane przez niezmienione funkcje rysujące z istniejących danych; nie uruchamiano nowych symulacji.",
+  "working_directory": "C:/Omnet/lora_relay",
+  "environment": {
+    "python": "3.12.10",
+    "matplotlib": "3.10.3",
+    "numpy": "2.2.5",
+    "scipy": "1.15.3"
+  },
+  "notes": [
+    "Ścieżki absolutne opisują lokalne archiwum użyte do wygenerowania przykładów. Na innym komputerze zastąp je własnymi ścieżkami.",
+    "Źródła nowych danych i polecenia uruchamiania symulatora opisano w README.md i nagłówkach.",
+    "Dla analiz wieloplikowych zapisano katalog i zakres wejść; sumy SHA-256 dotyczą tylko plików wyszczególnionych w inputs."
+  ],
+  "examples": [
+    {
+      "script": "plot_topology.py",
+      "example": "plot_topology_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/plot_topology.py",
+          "C:\\Omnet\\simulation_results\\chapter7\\scenarios\\02_1GW_SF12_N1_12h\\exec_results_topology.txt",
+          "--runs",
+          "0",
+          "--canvas",
+          "0",
+          "1400",
+          "0",
+          "900",
+          "-o",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\topology.png"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "354a794ccbd6b3b812782066dcf2c765ca887b8763d674912f326cfe5084457d"
+        }
+      ],
+      "image_sha256": "f867cc807387d94e96fedea59b85c3fd322b23ac228b8a9b0cf1f862060cede8",
+      "image_size_px": [
+        2035,
+        1246
+      ]
+    },
+    {
+      "script": "plot_topology_grid.py",
+      "example": "plot_topology_grid_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/plot_topology_grid.py",
+          "C:\\Omnet\\simulation_results\\chapter7\\scenarios\\02_1GW_SF12_N1_12h\\exec_results_topology.txt",
+          "--runs",
+          "0-5",
+          "--columns",
+          "3",
+          "-o",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\grid.png"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "354a794ccbd6b3b812782066dcf2c765ca887b8763d674912f326cfe5084457d"
+        }
+      ],
+      "image_sha256": "a1a882cae0d332e27fa1f3fa6b44ba7c7e4790852c14ffb09284de2ee91f013c",
+      "image_size_px": [
+        2719,
+        1425
+      ]
+    },
+    {
+      "script": "plot_topology_compare.py",
+      "example": "plot_topology_compare_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/plot_topology_compare.py",
+          "1 GW=C:\\Omnet\\simulation_results\\chapter7\\scenarios\\02_1GW_SF12_N1_12h\\exec_results_topology.txt",
+          "2 GW=C:\\Omnet\\simulation_results\\chapter7\\scenarios\\07_2GW_SF12_N1_12h\\exec_results_topology.txt",
+          "-o",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\compare.png"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "354a794ccbd6b3b812782066dcf2c765ca887b8763d674912f326cfe5084457d"
+        },
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/07_2GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "60fb07bf32be43e42a04d872c676b0c27b3e2c248473721874cb89a599010697"
+        }
+      ],
+      "image_sha256": "bbbd6dabf69ed70f01418b12af715b161725393125ef57fd0d112912ffa5d25a",
+      "image_size_px": [
+        2179,
+        826
+      ]
+    },
+    {
+      "script": "plot_topology_batch.py",
+      "example": "plot_topology_batch_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/plot_topology_batch.py",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\batch_input",
+          "-o",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\batch_output"
+        ],
+        "preparation": "Copy the source topology into <batch_input>/t02/exec_results_topology.txt."
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "354a794ccbd6b3b812782066dcf2c765ca887b8763d674912f326cfe5084457d"
+        }
+      ],
+      "image_sha256": "3e196962521847d21c26762375a635fe379238fcacca43ba14efd41f727eec6d",
+      "image_size_px": [
+        1964,
+        1316
+      ]
+    },
+    {
+      "script": "generate_b11_delay_timeline.py",
+      "example": "generate_b11_delay_timeline_example.png",
+      "kind": "ilustracja modelowa: historyczna zwłoka TS011=1 s; bez danych empirycznych",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_delay_timeline.py",
+          "--output",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\timeline"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/lora_relay/scripts/generate_b11_delay_timeline.py",
+          "sha256": "336a0af02de1c64239e6e6b532a9eaeefbbff0267d9bc0a78bb5789677f8c7ed"
+        },
+        {
+          "path": "C:/Omnet/lora_relay/scripts/generate_b11_delay_figure.py",
+          "sha256": "5db68202d355067c6cc851cabbc8a0f5d72269c2ba018cbb54f53cac467747cb"
+        }
+      ],
+      "image_sha256": "ea88a45f6616e34d54e90c95c310f2c5277c233092f7e6ddc3e381bf501e9284",
+      "image_size_px": [
+        2261,
+        1387
+      ]
+    },
+    {
+      "script": "generate_b11_topology_figure.py",
+      "example": "generate_b11_topology_figure_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_topology_figure.py",
+          "--results",
+          "C:\\Omnet\\simulation_results\\review_chapter1",
+          "--run",
+          "0",
+          "--output",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\b11_topology"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/reproducibility/simulations/omnetpp_review.ini",
+          "sha256": "939086fcd45dfe01c6a3fee6aeadbff8c039ffe04bef981df2f9da71c73a9c5c"
+        },
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/variants/b11_comparison__ep4312388_350/runs/run_00/exec_results_topology.txt",
+          "sha256": "f3e2da7dd619cacbd2a000a95746a0877fe52889fc5d261d5e7aaebd860bd4b9"
+        },
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/variants/b11_comparison__ts011_350/runs/run_00/exec_results_topology.txt",
+          "sha256": "ea6f805dc10f856f9ea2ffbc29c07ae71f52cb4b61626f58ec421c2f55fe21ff"
+        },
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/variants/b11_comparison__ts011_unlimited_350/runs/run_00/exec_results_topology.txt",
+          "sha256": "a03d4d92ebb92b738cfa773538c3110535517a7378e0ca28801852d0af97c185"
+        }
+      ],
+      "image_sha256": "89ce19552e935ebd6cb215a2d9fdb235eab6479e7e0343bf73afbe996acc449a",
+      "image_size_px": [
+        1551,
+        1538
+      ]
+    },
+    {
+      "script": "generate_b11_energy_figures.py",
+      "example": "generate_b11_energy_figures_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_energy_figures.py",
+          "--source",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\B11_energy_analysis.json",
+          "--output",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\energy"
+        ],
+        "preparation": "Copy the input JSON to a working directory; the script writes fit diagnostics alongside it."
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/B11_energy_analysis.json",
+          "sha256": "c769385ad0b282a3cbe43c39d4e6cbf6399318f6ea1f0c32f788c2ed5513eb6f"
+        }
+      ],
+      "image_sha256": "975892397c5655b65e6f00aba4504b440641438d6a1712776502bebbbf4a6833",
+      "image_size_px": [
+        1692,
+        936
+      ]
+    },
+    {
+      "script": "generate_b11_ed_current_figure.py",
+      "example": "generate_b11_ed_current_figure_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_ed_current_figure.py",
+          "--source",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\B11_ed_energy_analysis.json",
+          "--output",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\energy"
+        ],
+        "preparation": "Copy the input JSON to a working directory; the script writes fit diagnostics alongside it."
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/B11_ed_energy_analysis.json",
+          "sha256": "734f0db596f6191c834124ec40e5d17cd20f3b28f21405ee9e0ad8b7d97233c6"
+        }
+      ],
+      "image_sha256": "fc10f7ba331c9b1e04778ac9d9bbbe2af76be98b6461cd7d46def088ce7dbce3",
+      "image_size_px": [
+        1694,
+        1070
+      ]
+    },
+    {
+      "script": "generate_b11_probability_figure.py",
+      "example": "generate_b11_probability_figure_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_probability_figure.py",
+          "--summary",
+          "C:\\Omnet\\simulation_results\\review_chapter1\\chapter1_summary.csv",
+          "--results-root",
+          "C:\\Omnet\\simulation_results\\review_chapter1",
+          "--figures",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\probability",
+          "--diagnostics",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\probability"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/chapter1_summary.csv",
+          "sha256": "7e2343482a25a50ae254d9876a6f0d4a36c302aa2f04bf48e64d48ce6ea2e10b"
+        }
+      ],
+      "image_sha256": "d0cfbfc188601812247649b0fc3b42628921f34334ec03e40587e9211c76c010",
+      "image_size_px": [
+        1538,
+        2154
+      ],
+      "raw_results_root": "C:/Omnet/simulation_results/review_chapter1",
+      "raw_inputs": "900 exec_results.txt files in the b11_comparison variants; paths derived from chapter1_summary.csv."
+    },
+    {
+      "script": "generate_b11_delay_figure.py",
+      "example": "generate_b11_delay_figure_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "argv": [
+          "python",
+          "scripts/generate_b11_delay_figure.py",
+          "--results",
+          "C:\\Omnet\\simulation_results\\review_chapter1",
+          "--figures",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\delay",
+          "--diagnostics",
+          "C:\\Omnet\\tmp\\python_examples_20261011\\delay"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/reproducibility/simulations/omnetpp_review.ini",
+          "sha256": "939086fcd45dfe01c6a3fee6aeadbff8c039ffe04bef981df2f9da71c73a9c5c"
+        }
+      ],
+      "image_sha256": "a65af6f026a9aa8c9001f272445ef3285c5a83b3028554051d90283c877d1c9d",
+      "image_size_px": [
+        1624,
+        2143
+      ],
+      "raw_results_root": "C:/Omnet/simulation_results/review_chapter1",
+      "raw_inputs": "900 results.sca plus 900 exec_results.txt files in the b11_comparison variants; 30 replications per load."
+    },
+    {
+      "script": "generate_chapter7_results.py",
+      "example": "generate_chapter7_results_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "python_api": "generate_chapter7_results.plot_figure_71_style",
+        "arguments": [
+          "C:/Omnet/tmp/python_examples_20261011/chapter7_t02",
+          "1 GW / SF12 / N=1 / 12 h"
+        ],
+        "preparation": "Copy the listed topology to <destination>/exec_results_topology.txt; import with scripts on sys.path."
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/chapter7/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt",
+          "sha256": "354a794ccbd6b3b812782066dcf2c765ca887b8763d674912f326cfe5084457d"
+        }
+      ],
+      "image_sha256": "797fefc3c005db11f149ea521982c8bf47c3e8c02385d829d130f5ebb2e639de",
+      "image_size_px": [
+        3116,
+        918
+      ]
+    },
+    {
+      "script": "generate_review_chapter1_results.py",
+      "example": "generate_review_chapter1_results_example.png",
+      "kind": "wynik z archiwalnych danych symulatora",
+      "reproduction": {
+        "python_api": "generate_review_chapter1_results.make_plots",
+        "arguments": [
+          "CSV records filtered to group=b11_comparison",
+          "C:/Omnet/tmp/python_examples_20261011/review"
+        ],
+        "preparation": "Read the summary using csv.DictReader; import with scripts on sys.path."
+      },
+      "inputs": [
+        {
+          "path": "C:/Omnet/simulation_results/review_chapter1/chapter1_summary.csv",
+          "sha256": "7e2343482a25a50ae254d9876a6f0d4a36c302aa2f04bf48e64d48ce6ea2e10b"
+        }
+      ],
+      "image_sha256": "4a058fad7c90a74f019ac65f7f04aa92dd3aa47011740f35f40f264729387f5b",
+      "image_size_px": [
+        2216,
+        2299
+      ]
+    }
+  ]
+}

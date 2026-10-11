@@ -1,3 +1,50 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: topology_plotting.py
+#
+# DZIAŁANIE
+# Wspólne funkcje Matplotlib: styl, rysowanie ED i infrastruktury, statystyki,
+# skala skuteczności, zakres osi oraz zapis i zamknięcie figury.
+#
+# WEJŚCIE I PARAMETRY
+# Brak CLI. draw_topology(ax, devices, fixed_nodes, ...): obiekt Axes,
+# niepusta sekwencja EndDevice i sekwencja FixedNode (może być pusta).
+# cmap='viridis'; point_size=24 pt² (zalecane > 0); alpha=0.88 (0..1);
+# label_fixed_nodes=True (bool). Skala procentowa jest stała: 0..100.
+# apply_canvas(ax, canvas): None lub 4 liczby xmin,xmax,ymin,ymax w metrach.
+# save_figure(figure, output, dpi=180, show=False): ścieżka pliku,
+# dodatnie dpi; show=True tylko wypisuje ścieżkę, nie otwiera okna.
+# add_success_colorbar(figure, axes, cmap='viridis'): figura i jej oś/osie.
+# configure_style(): bez argumentów; flatten(groups): grupy EndDevice;
+# add_success_statistics(ax, devices): średnia, mediana i kwartyle procentów.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zbuduj symulator w trybie release (instrukcja: scripts/README.md).
+# Z katalogu repozytorium wygeneruj sześć pełnych przebiegów:
+#   python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Plik wejściowy powstanie pod ścieżką:
+#   tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt
+# W przykładach PowerShell przypisz tę ścieżkę do zmiennej $topology.
+# Eksport Keeper zawiera sekcje role,idx,x,y oraz
+# idx,x,y,avg_daily_success_UL[%]; wartości skuteczności są procentami 0..100.
+#
+# URUCHOMIENIE
+# Przykład API w Pythonie (scripts w sys.path; data z parse_topology):
+#   import matplotlib.pyplot as plt
+#   from topology_plotting import configure_style, draw_topology, save_figure
+#   configure_style()
+#   fig, ax = plt.subplots()
+#   draw_topology(ax, data.devices, data.fixed_nodes)
+#   print(save_figure(fig, "tmp/topology_api.png"))
+#
+# PRZYKŁADOWY WYNIK
+# tmp/topology_api.png oraz bezwzględna ścieżka zwrócona przez save_figure.
+# Efekt funkcji pokazują pliki plot_topology*_example.png obok modułu.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib; używany jest backend Agg (bez okna GUI).
+# Import modułu sam w sobie nie odczytuje wyników ani nie zapisuje wykresu.
+# =============================================================================
+
 """Shared Matplotlib helpers for LoRa topology figures."""
 
 from __future__ import annotations

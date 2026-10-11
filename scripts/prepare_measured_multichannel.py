@@ -1,3 +1,49 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: prepare_measured_multichannel.py
+#
+# DZIAŁANIE
+# Przekształca oczyszczone współrzędne pomiarowe ED do lokalnych metrów
+# i przygotowuje konfigurację MeasuredNetwork dla ośmiu kanałów.
+# Nie zgaduje brakujących parametrów ani nie traktuje odbiorów jako liczby nadań.
+#
+# WEJŚCIE I PARAMETRY
+# Wymagane: --devices (CSV), --repo (repozytorium), --output (katalog).
+# Opcjonalne: --parameters (JSON). CSV UTF-8 z nagłówkiem device,longitude,
+# latitude,modal_sf; >= 1 wiersz, unikalne device, skończona długość -180..180°,
+# szerokość -90..90°, całkowite SF=7..12.
+# JSON: gw_longitude -180..180°, gw_latitude -90..90°, tx_power_dbm -20..30 dBm;
+# payload_bytes 1..242 B, frames_per_window i ack_every 1..100000,
+# windows_per_day 1..2, window_start1_minutes/window_start2_minutes 0..1439,
+# window_duration1_minutes/window_duration2_minutes 1..1440.
+# Ostatnie osiem parametrów (po tx_power_dbm) to liczby całkowite; współrzędne
+# i moc mogą być rzeczywiste. Początek+czas każdego okna <= 1440 min.
+# Brakujące klucze lub null pozostają niewypełnione; nieznane klucze są błędem.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Przed tym skryptem NIE uruchamia się symulatora: wejściem są oczyszczone
+# dane terenowe i parametry wdrożenia. Utwórz devices.csv i parameters.json
+# zgodnie z zakresami powyżej; przykład plików jest w scripts/README.md.
+# Po przygotowaniu uzupełnij wszystkie null/ask, zbuduj symulator release,
+# uruchom wygenerowany piekary_uniform.ini, konfigurację PiekaryUniform,
+# powtórzenia -r 0..29 osobno (po 98 dni). Dla każdego użyj osobnego CWD,
+# --result-dir i --output-scalar-file. Pełne polecenie podano w README.
+#
+# URUCHOMIENIE
+# python scripts/prepare_measured_multichannel.py --devices tmp/devices.csv --parameters tmp/parameters.json --repo . --output tmp/measured
+#
+# PRZYKŁADOWY WYNIK
+# piekary_uniform.ini, required_parameters.json, topology_local.csv,
+# scenario_manifest.json w --output; stdout JSON z devices i missing_parameters.
+# status: DRAFT_MISSING_PARAMETERS lub READY_FOR_ASSUMPTION_REVIEW.
+# Brak pliku PNG; wynik służy jako wejście symulatora.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, biblioteka standardowa. Skrypt nie uruchamia symulacji.
+# Kanały DATA są wybierane równomiernie (1/8), Join używa pierwszych trzech (1/3).
+# Współrzędne GW muszą pochodzić z danych; nawet dla jednego okna JSON wymaga
+# parametrów obu okien, aby nie pozostawić ask w konfiguracji.
+# =============================================================================
+
 """Prepare a measured topology without inventing missing deployment parameters.
 
 Input devices.csv is the cleaned, local-only audit table. No observed receive

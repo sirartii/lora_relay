@@ -1,4 +1,52 @@
 #!/usr/bin/env python3
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: plot_topology_compare.py
+#
+# DZIAŁANIE
+# Porównuje skumulowane topologie kilku scenariuszy na wspólnej skali 0..100%.
+# Każdy panel obejmuje wszystkie przebiegi z jednego pliku.
+#
+# WEJŚCIE I PARAMETRY
+# inputs: co najmniej jedna ścieżka albo para "Etykieta=ścieżka"; do porównania
+# podaj >= 2 pliki. Bez etykiety używana jest nazwa katalogu lub pliku.
+# -o/--output: plik, domyślnie topology_comparison.png.
+# --columns: liczba kolumn >= 1, domyślnie 2; sprawdzana w skrypcie.
+# --point-size: pt², zalecane > 0, domyślnie 18.
+# --no-labels: ukrywa etykiety stałych węzłów; domyślnie wyłączone.
+#
+# --cmap: nazwa palety Matplotlib, domyślnie viridis.
+# --dpi: dodatnia liczba całkowita, domyślnie 180.
+# --canvas: cztery liczby XMIN XMAX YMIN YMAX w metrach; zalecane
+# XMIN < XMAX i YMIN < YMAX; bez opcji zakres wynika z punktów.
+# --lenient: domyślnie wyłączone; pomija niekompletne bloki, a także
+# wyłącza kontrolę zakresu procentów. Nie naprawia błędnych pomiarów.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Najpierw zbuduj symulator w trybie release (instrukcja: scripts/README.md).
+# Z katalogu repozytorium wygeneruj sześć pełnych przebiegów:
+#   python scripts/generate_chapter7_results.py --sections table --scenarios t02 --runs 6 --days 30 --output tmp/docs_demo
+# Plik wejściowy powstanie pod ścieżką:
+#   tmp/docs_demo/scenarios/02_1GW_SF12_N1_12h/exec_results_topology.txt
+# W przykładach PowerShell przypisz tę ścieżkę do zmiennej $topology.
+# Eksport Keeper zawiera sekcje role,idx,x,y oraz
+# idx,x,y,avg_daily_success_UL[%]; wartości skuteczności są procentami 0..100.
+#
+# Drugą topologię wygeneruj tym samym poleceniem dla --scenarios t07.
+# W PowerShell przypisz do $topology2 ścieżkę:
+#   tmp/docs_demo/scenarios/07_2GW_SF12_N1_12h/exec_results_topology.txt
+#
+# URUCHOMIENIE
+# python scripts/plot_topology_compare.py "1 GW=$topology" "2 GW=$topology2" -o tmp/topology_compare.png
+#
+# PRZYKŁADOWY WYNIK
+# tmp/topology_compare.png: panele obu scenariuszy ze średnią skutecznością.
+# Stdout: ścieżka pliku. Podgląd: plot_topology_compare_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib. Dla porównania użyj zgodnych czasów symulacji
+# i definicji metryk; skrypt nie sprawdza zgodności konfiguracji scenariuszy.
+# =============================================================================
+
 """Compare aggregate topologies from several scenarios side by side."""
 
 from __future__ import annotations

@@ -1,3 +1,37 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_delay_timeline.py
+#
+# DZIAŁANIE
+# Rysuje idealizowaną oś czasu transmisji bezpośredniej, przez EP i przez TS011.
+# To ilustracja ze wzoru modelu, a nie ślad zdarzeń lub rozkład empirycznej średniej.
+#
+# WEJŚCIE I PARAMETRY
+# --output: wymagany katalog wyjściowy, tworzony automatycznie.
+# Brak plików wejściowych i innych opcji CLI. Stałe: payload 51 B,
+# backhaul TS 70 B, SF12 bezpośrednio i SF9 przez RL, BW=125 kHz,
+# zwłoka TS=1 s, deduplikacja=0.1 s, brak kolejek i zakłóceń.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Nie trzeba uruchamiać symulatora. Skrypt korzysta z funkcji model_airtime
+# w generate_b11_delay_figure.py, odwzorowującej LoRaPacket::calcMsgDuration.
+# Założenia są zapisane w kodzie, nie wczytywane z aktualnego pliku INI.
+# Obecne omnetpp_review.ini ma ts011RelayForwardDelay=50ms, więc ta ilustracja
+# opisuje historyczne ustawienie 1 s. Empiryczne dane przygotuj wg instrukcji B11
+# w scripts/README.md i analizuj przez generate_b11_delay_figure.py.
+#
+# URUCHOMIENIE
+# python scripts/generate_b11_delay_timeline.py --output tmp/b11_timeline
+#
+# PRZYKŁADOWY WYNIK
+# B11_przebieg_czasowy.png/.pdf/.json w --output; stdout: czasy ścieżek [s].
+# Po zaokrągleniu: bezpośrednio 2.893 s, EP 0.880 s, TS/TS0 1.962 s.
+# Podgląd: generate_b11_delay_timeline_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy, SciPy (także zależności importowanego modułu).
+# Zmiana parametrów symulatora nie aktualizuje automatycznie tej ilustracji.
+# =============================================================================
+
 """Model-derived timing illustration, not an event trace or a mean decomposition."""
 from __future__ import annotations
 import argparse

@@ -1,3 +1,44 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: analyze_b11_case.py
+#
+# DZIAŁANIE
+# Analizuje przypadek B11 z 385 ED: PDR, skuteczność dzienną, utracone ramki,
+# liczniki TS011 oraz sparowane różnice między trzema wariantami z 95% PU.
+#
+# WEJŚCIE I PARAMETRY
+# --output: plik JSON; domyślnie scripts/B11_case_385.json.
+# Stała ROOT = C:/Omnet/simulation_results/review_chapter1 (brak opcji CLI zmiany).
+# Wymagane trzy warianty *_350, run_00..29, każdy: exec_results.txt,
+# results.sca i exec_results_topology.txt. Dokładnie 350+35 ED, 30 dni,
+# 26 dni statystyki, identyczne współrzędne urządzeń w sparowanych przebiegach.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# python scripts/analyze_b11_case.py --output tmp/B11_case_385.json
+#
+# PRZYKŁADOWY WYNIK
+# JSON na stdout i w tmp/B11_case_385.json; np. pola case_ed: 385,
+# replicates: 30, quality_days: 26, series, paired_changes.
+# Wartości metryk zależą od dostarczonych wyników; brak pliku graficznego.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, biblioteka standardowa. Katalog rodzica --output musi istnieć.
+# Analiza odbywa się PRZED parsowaniem argumentów, więc nawet --help czyta dane.
+# Znaczniki kolizji nie są rozłącznymi przyczynami fizycznymi utraty ramek.
+# =============================================================================
+
 """Read-only analysis of existing B11 runs; write auditable case diagnostics."""
 import json
 import re

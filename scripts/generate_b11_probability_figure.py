@@ -1,3 +1,46 @@
+# =============================================================================
+# STANDARDOWY OPIS SKRYPTU: generate_b11_probability_figure.py
+#
+# DZIAŁANIE
+# Tworzy dwa panele skuteczności B11, 95% PU i dopasowania opisowe.
+# Przelicza procenty z liczników całkowitych, wybiera rodzinę krzywej przez LOO
+# i wymaga nierosnącego przebiegu w 0..100% na obserwowanym zakresie.
+#
+# WEJŚCIE I PARAMETRY
+# Wszystkie opcje wymagane: --summary (chapter1_summary.csv), --results-root
+# (katalog z variants), --figures (katalog PNG/PDF), --diagnostics (katalog JSON).
+# CSV: group, variant, series, x, runs; group=b11_comparison, serie EP4312388,
+# TS011, TS011 bez limitu; 10 poziomów 55..550 ED co 55, po 30 przebiegów.
+# W exec_results.txt wymagane dodatnie mianowniki liczników ramek i device-days;
+# wartości *_mean i *_ci_low/high są przeliczane z tych liczników.
+#
+# PRZYGOTOWANIE DANYCH Z SYMULATORA
+# Zbuduj symulator release; konfiguracja wejściowa: simulations/omnetpp_review.ini.
+# Z katalogu repozytorium uruchom (900 symulacji; polecenie w jednej linii):
+#   python scripts/generate_review_chapter1_results.py --groups b11_comparison --runs 30 --output C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures
+# Zachowaj variants/b11_comparison__<wariant>_<centralne_ED>/runs/run_00..29/
+# z plikami exec_results.txt, exec_results_topology.txt i results.sca,
+# chapter1_summary.csv oraz katalog reproducibility. Są trzy warianty:
+# ep4312388, ts011, ts011_unlimited; centralne_ED = 50..500 co 50,
+# łącznie z wyspami = 55..550 co 55. Przebieg trwa 30 dni, warmup 4 dni.
+# Dla wyników historycznych użyj zgodnej wersji źródeł i konfiguracji;
+# nowa symulacja zmienionego modelu nie odtwarza automatycznie starego B11.
+# Szczegóły i kolejność analiz: scripts/README.md, sekcja „Dane B11”.
+#
+# URUCHOMIENIE
+# Polecenie z katalogu repozytorium, w jednej linii:
+#   python scripts/generate_b11_probability_figure.py --summary C:/Omnet/simulation_results/review_chapter1/chapter1_summary.csv --results-root C:/Omnet/simulation_results/review_chapter1 --figures tmp/b11_figures --diagnostics tmp/b11_diagnostics
+#
+# PRZYKŁADOWY WYNIK
+# B11_prawdopodobienstwa.png/.pdf w --figures; B11_probability_fits.json
+# i B11_probabilities.json w --diagnostics; stdout: lista zapisanych obrazów.
+# Podgląd: generate_b11_probability_figure_example.png.
+#
+# UWAGI I ZALEŻNOŚCI
+# Python >= 3.10, Matplotlib, NumPy, SciPy. Wymaga pełnych 30 replik,
+# nie wyników --quick. Dopasowania nie są ekstrapolowane poza 55..550 ED.
+# =============================================================================
+
 """Reproducible B11 probability figure and descriptive-fit diagnostics.
 
 Uses aggregate simulation means, never extrapolates, and selects from four
