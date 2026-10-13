@@ -92,7 +92,7 @@ Within a channel, the current model uses a pairwise **6 dB capture approximation
 
 ## Enhanced Proximity relaying
 
-**Enhanced Proximity (EP)** is the name used here for the relay approach identified as `EP431` in the source code and associated with European patent application **EP4312388A1**.
+**Enhanced Proximity (EP)** is the name used here for the relay approach associated with European patent application **EP4312388A1**.
 
 The method uses knowledge of the network and predictable rendezvous times to provide relay assistance with short, scheduled listening periods. The protocol concept is:
 
